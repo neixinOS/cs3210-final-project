@@ -1,0 +1,84 @@
+3.1: After .code32 flag in boot/boot.S, when the processor switched into protected mode. The cause is setting the 0-th bit of CR0 to 1.
+
+3.2: The last instruction of bootloader is  
+    7d61:	ff 15 18 00 01 00    	call   *0x10018
+     The first instruction of kernel is
+f010000c:	66 c7 05 72 04 00 00 	movw   $0x1234,0x472
+
+3.3: The first instruction of the kernel is at address 0x10000c
+
+3.4: The bootloader looks at ELFHDR for program segments, and then look at ph (program header) for the length info (ph->p_memsz)
+
+6.0: The address 0x100000 is first loaded by bootloader to load the kernel. The data there is kernel binary at the second breakpoint.
+
+7.1: The data at 0xf0100000 appears the same as 0x00100000 after stepi. This is because the paging maps [0xf0000000, 0xffffffff) into [0x00000000, 0x0fffffff) 
+
+7.2: The execution goes wrong after call i386_init
+
+8.1: cputchar. It's used by putch.
+
+8.2: Scrolling up by one line.
+
+8.3: fmt points to the beginning of char array somewhere in the .rodata. ap points to EBP+8
+
+vcprintf (fmt=0xf010228f "x %d, y %x, z %d\n", ap=0xf0110fd4 "\001")
+cons_putc(120) x
+cons_putc(32)
+va_arg() before: 1 after: 3
+cons_putc(49) 1
+cons_putc(44) ,
+cons_putc(32)
+cons_putc(121) y
+cons_putc(32)
+va_arg() before: 3 after: 4
+cons_putc(51) 3
+cons_putc(44) ,
+cons_putc(32)
+cons_putc(122) z
+cons_putc(32)
+va_arg() before: 4 after: the address right after 4
+cons_putc(52) 4
+cons_putc(10) \n
+
+8.4: 
+
+vcprintf (fmt=0xf010227f "H%x Wo%s", ap=0xf0110fd4 "\020\341")
+cons_putc (c=72)
+va_arg() before: 57616 after: 0xf0110fec addr of i
+cons_putc (c=101)
+cons_putc (c=49)
+cons_putc (c=49)
+cons_putc (c=48)
+cons_putc (c=32)
+cons_putc (c=87)
+cons_putc (c=111)
+va_arg() before: addr of i after: undefined
+cons_putc (c=114)
+cons_putc (c=108)
+cons_putc (c=100)
+
+0x726c6400
+
+57616 doesn't need changing
+
+8.5: The value pointed to after 3, interpreted as integer. Because va_arg advances the pointer by sizeof(type)
+
+8.6: The fmt string should be put at the last argument.
+
+9.0: in entry.S:77. By mov $0xf0111000,%esp. The stackpointer is initialized to the high end. Then the stack should grow towards lower end.
+
+10.0: 8 words.
+
+after
+f0100043:	83 ec 18             	sub    $0x18,%esp
+
++-------------+
+|   6 words   | <- for local var and parameters for next call
++-------------+
+|  saved ebp  |
++-------------+
+| return addr |
++-------------+ <- above allocated since call
+| param x     | <- saved by previous level of call
++-------------+
+
