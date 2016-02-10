@@ -28,13 +28,69 @@ static struct Command commands[] = {
   { "info-kern", "Display information about the kernel", mon_infokern   },
   { "backtrace", "Display backtrace info",               mon_backtrace  },
   { "showmappings", "Show page mapping from range a to b", mon_showmappings  },
+  { "mapchmod", "Change the permission of mapping", mon_mapchmod},
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
 /***** Implementations of basic kernel monitor commands *****/
 
+int mon_mapchmod(int argc, char **argv, struct Trapframe *tf) {
+  //expected way to call
+  //mapchmod +w +u 0xef0000000
+
+  if (argc <= 1) {
+    cprintf("USAGE: %s [+w] [+u] [-w] [-u] virtual_address\n", argv[0]);
+    return 1;
+  }
+  
+  //parse parameters
+  int user = 0, write = 0;
+  uintptr_t addr=0;
+  for (int i = 1; i < argc; ++i) {
+    switch(argv[i][0]) {
+      case '+':
+        switch (argv[i][1]) {
+          case 'u':
+            user = 1;
+            break;
+          case 'w':
+            write = 1;
+            break;
+          default:
+            cprintf("unknown parameter %s\n", argv[i]);
+            return 2;
+        }
+        break;
+      case '-':
+        switch (argv[i][1]) {
+          case 'u':
+            user = -1;
+            break;
+          case 'w':
+            write = -1;
+            break;
+          default:
+            cprintf("unknown parameter %s\n", argv[i]);
+            return 2;
+        }
+        break;
+      default:
+        addr=strtol(argv[i], NULL, 16);
+    }
+  }
+
+  pte_t* pteentry = pgdir_walk(kern_pgdir, (void*)addr, false);
+  if (pteentry && *pteentry & PTE_P) {
+    //the entry exsits and is present
+    *pteentry = (*pteentry | (user>0 ? PTE_U : 0) | (write>0 ? PTE_W : 0)) & (user<0 ? ~PTE_U: ~0) & (write<0 ? ~PTE_W: ~0);
+  } else {
+    cprintf("address %p does not point to a valid PTE\n", addr);
+    return 3;
+  }
+  return 0;
+}
+
 int mon_showmappings(int argc, char **argv, struct Trapframe *tf) {
-  cprintf("UPAGES %p\n",*(pde_t*)UPAGES);
   if (argc != 3) {
     cprintf("Show mapping require two parameters\n");
     return 1;
@@ -50,7 +106,7 @@ int mon_showmappings(int argc, char **argv, struct Trapframe *tf) {
   for (uintptr_t i = begin; i<=end; i+=PGSIZE) {
     pte_t* pteentry = pgdir_walk(kern_pgdir, (void*)i, false);
     if (pteentry && *pteentry & PTE_P) {
-        cprintf("source: %p target: %p PTE_U: %s PTE_W %d\n",i,PTE_ADDR(*pteentry), PTE_U & *pteentry ? "true":"false", PTE_W & *pteentry ? "true":"false");
+        cprintf("source: %p target: %p PTE_U: %s PTE_W %s\n",i,PTE_ADDR(*pteentry), PTE_U & *pteentry ? "true":"false", PTE_W & *pteentry ? "true":"false");
     } else {
       cprintf("source: %p target: Nomapping\n", i);
     }
