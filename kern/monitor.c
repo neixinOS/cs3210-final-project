@@ -11,6 +11,8 @@
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
 
+#include <kern/pmap.h>
+
 #define CMDBUF_SIZE 80 // enough for one VGA text line
 
 
@@ -32,12 +34,28 @@ static struct Command commands[] = {
 /***** Implementations of basic kernel monitor commands *****/
 
 int mon_showmappings(int argc, char **argv, struct Trapframe *tf) {
-    cprintf("Showing mappings");
-    if (argc != 3) {
-        cprintf("Show mapping require two parameters\n");
-        return 1;
+  cprintf("UPAGES %p\n",*(pde_t*)UPAGES);
+  if (argc != 3) {
+    cprintf("Show mapping require two parameters\n");
+    return 1;
+  }
+  //parse the parameters
+  uintptr_t begin=strtol(argv[1], NULL, 16)&(~0xFFF);
+  uintptr_t end=strtol(argv[2], NULL, 16)&(~0xFFF);
+  if (begin > end) {
+    cprintf("begin cannot be bigger than end\n");
+    return 2;
+  }
+  //then walk the table
+  for (uintptr_t i = begin; i<=end; i+=PGSIZE) {
+    pte_t* pteentry = pgdir_walk(kern_pgdir, (void*)i, false);
+    if (pteentry && *pteentry & PTE_P) {
+        cprintf("source: %p target: %p PTE_U: %s PTE_W %d\n",i,PTE_ADDR(*pteentry), PTE_U & *pteentry ? "true":"false", PTE_W & *pteentry ? "true":"false");
+    } else {
+      cprintf("source: %p target: Nomapping\n", i);
     }
-    return 0;
+  }
+  return 0;
 }
 
 int
