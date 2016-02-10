@@ -715,7 +715,6 @@ check_kern_pgdir(void)
         assert(pgdir[i] & PTE_P);
         assert(pgdir[i] & PTE_W);
       } else {
-        if (pgdir[i]) cprintf("pde idx:%u\n",i);//owo
         assert(pgdir[i] == 0);
       }
       break;

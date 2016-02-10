@@ -25,10 +25,20 @@ static struct Command commands[] = {
   { "help",      "Display this list of commands",        mon_help       },
   { "info-kern", "Display information about the kernel", mon_infokern   },
   { "backtrace", "Display backtrace info",               mon_backtrace  },
+  { "showmappings", "Show page mapping from range a to b", mon_showmappings  },
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
 /***** Implementations of basic kernel monitor commands *****/
+
+int mon_showmappings(int argc, char **argv, struct Trapframe *tf) {
+    cprintf("Showing mappings");
+    if (argc != 3) {
+        cprintf("Show mapping require two parameters\n");
+        return 1;
+    }
+    return 0;
+}
 
 int
 mon_help(int argc, char **argv, struct Trapframe *tf)
