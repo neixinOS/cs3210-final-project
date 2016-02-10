@@ -29,11 +29,44 @@ static struct Command commands[] = {
   { "backtrace", "Display backtrace info",               mon_backtrace  },
   { "showmappings", "Show page mapping from range a to b", mon_showmappings  },
   { "mapchmod", "Change the permission of mapping", mon_mapchmod},
+  { "memdump", "Dump the memory from a to b inclusive", mon_memdump},
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
 /***** Implementations of basic kernel monitor commands *****/
 
+int mon_memdump(int argc, char **argv, struct Trapframe *tf) {
+{
+  if (argc != 3) {
+    cprintf("USAGE: %s begin_addr end_addr", argv[0]);
+    return 1;
+  }
+
+  uintptr_t begin_addr = strtol(argv[1], NULL, 16);
+  uintptr_t end_addr = strtol(argv[2], NULL, 16);
+  for (uintptr_t addr = begin_addr; addr <= end_addr; addr+=0x10) {
+    //first make sure the memory region is mapped
+    pte_t* pteentry = pgdir_walk(kern_pgdir, (void*)addr, false);
+
+    cprintf("%016x: ", addr);
+    for (int j = 0; j < MIN(0x10, end_addr-addr); ++j)
+      if (pteentry && (*pteentry & PTE_P)) {
+        //the entry exist and is present
+        //this is supposed to be a paddr that's not specially mapped
+        cprintf("%02x ", *((unsigned char*)addr + j));
+      } else {
+        cprintf("%02x ", *((unsigned char*)KADDR(addr) + j));
+      }
+    cprintf("| ");
+    for (int j = 0; j < MIN(0x10, end_addr-addr); ++j) {
+      char c = (pteentry && (*pteentry & PTE_P)) ? *((char*)addr+j) : *((char*)KADDR(addr)+j);
+      cprintf("%c", isprint(c) ? c : '.');
+    }
+    cprintf("\n");
+  }
+  return 0;
+}
+}
 int mon_mapchmod(int argc, char **argv, struct Trapframe *tf) {
   //expected way to call
   //mapchmod +w +u 0xef0000000
