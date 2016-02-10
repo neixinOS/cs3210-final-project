@@ -22,3 +22,5 @@ Q6: at entry.S:67
 
    This is possible because the [0,4M) is still mapped to [0,4M)
    It's necessary because KERNEL is linked at KERNBASE, which is beyond 4M.
+
+Challenge: Installed showmappings
