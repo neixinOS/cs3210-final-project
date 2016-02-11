@@ -29,6 +29,9 @@ i386_init(void)
   // Lab 2 memory management initialization functions
   mem_init();
 
+  // testing info-pg
+  mon_infopg( 0, 0, 0);
+
   // Drop into the kernel monitor.
   while (1)
     monitor(NULL);
