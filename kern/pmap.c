@@ -179,9 +179,16 @@ mem_init(void)
   //    - pages itself -- kernel RW, user NONE
   // Your code goes here:
   // set up the new image
-  boot_map_region(kern_pgdir, UPAGES, npages*sizeof(struct PageInfo), PADDR(pages), PTE_U | PTE_P);
+  uintptr_t va=ROUNDDOWN(UPAGES, PGSIZE);
+  physaddr_t pa=ROUNDDOWN(PADDR(pages), PGSIZE);
+  size_t size=ROUNDUP(npages*sizeof(struct PageInfo)+UPAGES-ROUNDDOWN(UPAGES, PGSIZE), PGSIZE);
+  boot_map_region(kern_pgdir, va, size, pa, PTE_U | PTE_P);
+  cprintf("pages %p PADDR(pages) %p\n", pages, PADDR(pages));
   // set the permission of the physical memory data
-  boot_map_region(kern_pgdir, (uintptr_t)pages, npages*sizeof(struct PageInfo), PADDR(pages), PTE_W | PTE_P);
+  va=ROUNDDOWN((uintptr_t)pages, PGSIZE);
+  pa=ROUNDDOWN(PADDR(pages), PGSIZE);
+  size=ROUNDUP(npages*sizeof(struct PageInfo)+(uintptr_t)pages-va, PGSIZE);
+  boot_map_region(kern_pgdir, va, size, pa, PTE_W | PTE_P);
 
   //////////////////////////////////////////////////////////////////////
   // Use the physical memory that 'bootstack' refers to as the kernel
@@ -194,7 +201,10 @@ mem_init(void)
   //       overwrite memory.  Known as a "guard page".
   //     Permissions: kernel RW, user NONE
   // Your code goes here:
-  boot_map_region(kern_pgdir, KSTACKTOP-KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W | PTE_P);
+  va=KSTACKTOP-KSTKSIZE;
+  pa=PADDR(bootstack);
+  size=KSTKSIZE;
+  boot_map_region(kern_pgdir, va, size, pa, PTE_W | PTE_P);
 
   //////////////////////////////////////////////////////////////////////
   // Map all of physical memory at KERNBASE.
@@ -204,7 +214,10 @@ mem_init(void)
   // we just set up the mapping anyway.
   // Permissions: kernel RW, user NONE
   // Your code goes here:
-  boot_map_region(kern_pgdir, KERNBASE, 0xffffffff-KERNBASE, 0, PTE_W | PTE_P | PTE_AVAIL);
+  va=KERNBASE;
+  pa=0;
+  size=0xffffffff-KERNBASE+1;
+  boot_map_region(kern_pgdir, va, size, pa, PTE_W | PTE_P );
 
   // Check that the initial page directory has been set up correctly.
   check_kern_pgdir();
@@ -417,6 +430,7 @@ static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
   // Fill this function in
+  cprintf("mapping: %p -> %p size %08x\n", va, pa, size);
   for (size_t i = 0; i < size; i+=PGSIZE) {
     pte_t* pteentry = pgdir_walk(pgdir, (void*)(va+i), true);
     *(pteentry) = PTE_ADDR(pa+i) | perm | PTE_P;

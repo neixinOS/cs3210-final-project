@@ -40,57 +40,62 @@ int mon_infopg(int argc, char **argv, struct Trapframe *tf) {
     pde_t* pdebeg = KADDR(rcr3());
     pde_t* pdeend = pdebeg+NPTENTRIES;
     for (pde_t* pde=pdebeg; pde<pdeend; ++pde) {
-        if (*pde & PTE_P) {
-            cprintf("[%08x-%08x]  PDE[%08x] %c%c%c%c%c%c%c%c%c\n",
-            pde, pde+1, PTE_ADDR(*pde),
-            (*pde & PTE_G) ? 'G' : '-',
-            (*pde & PTE_PS) ? 'S' : '-',
-            (*pde & PTE_D) ? 'D' : '-',
-            (*pde & PTE_A) ? 'A' : '-',
-            (*pde & PTE_PCD) ? 'C' : '-',
-            (*pde & PTE_PWT) ? 'T' : '-',
-            (*pde & PTE_U) ? 'U' : '-',
-            (*pde & PTE_W) ? 'W' : '-',
-            (*pde & PTE_P) ? 'P' : '-'); 
-            //recursively walk through the PTE
-            pte_t* ptebeg = KADDR(PTE_ADDR(*pde));
-            pte_t* pteend = ptebeg+NPTENTRIES;
-            pte_t* p1=ptebeg;
-            for (pte_t* pte=ptebeg+1; pte<pteend; ++pte) {
-                if ((*p1 & 0xfff) == (*pte & 0xfff)) {
-                    //the chunk is the same
-                    continue;
-                } else {
-                    if (*p1 & PTE_P)
-                        cprintf("[%08x-%08x] PTE[%04u-%04u] %c%c%c%c%c%c%c%c%c %08x .. %08x (phys)\n",
-                        p1, pte-1, p1-ptebeg, pte-1-ptebeg,
-                        (*p1 & PTE_G) ? 'G' : '-',
-                        (*p1 & PTE_PS) ? 'S' : '-',
-                        (*p1 & PTE_D) ? 'D' : '-',
-                        (*p1 & PTE_A) ? 'A' : '-',
-                        (*p1 & PTE_PCD) ? 'C' : '-',
-                        (*p1 & PTE_PWT) ? 'T' : '-',
-                        (*p1 & PTE_U) ? 'U' : '-',
-                        (*p1 & PTE_W) ? 'W' : '-',
-                        (*p1 & PTE_P) ? 'P' : '-',
-                        PTE_ADDR(*p1), PTE_ADDR(*(pte-1))); 
-                    p1 = pte;
-                }
+        if (!(*pde & PTE_P)) continue;
+        cprintf("[%08x-%08x]  PDE[%08x] %c%c%c%c%c%c%c%c%c\n",
+        PGADDR(pde-pdebeg,0,0), 
+        PGADDR(pde+1-pdebeg,0,0),
+        PTE_ADDR(*pde),
+        (*pde & PTE_G) ? 'G' : '-',
+        (*pde & PTE_PS) ? 'S' : '-',
+        (*pde & PTE_D) ? 'D' : '-',
+        (*pde & PTE_A) ? 'A' : '-',
+        (*pde & PTE_PCD) ? 'C' : '-',
+        (*pde & PTE_PWT) ? 'T' : '-',
+        (*pde & PTE_U) ? 'U' : '-',
+        (*pde & PTE_W) ? 'W' : '-',
+        (*pde & PTE_P) ? 'P' : '-'); 
+        //recursively walk through the PTE
+        pte_t* ptebeg = KADDR(PTE_ADDR(*pde));
+        pte_t* pteend = ptebeg+NPTENTRIES;
+        pte_t* p1=ptebeg;
+        for (pte_t* pte=ptebeg+1; pte<pteend; ++pte) {
+            if ((*p1 & 0xfff) == (*pte & 0xfff)) {
+                //the chunk is the same
+                continue;
+            } else {
+                if (*p1)
+                    cprintf("[%08x-%08x] PTE[%04u-%04u] %c%c%c%c%c%c%c%c%c %08x .. %08x (phys)\n",
+                    PGADDR(pde-pdebeg,p1-ptebeg,0), 
+                    PGADDR(pde-pdebeg,pte-1-ptebeg,0),
+                    p1-ptebeg, pte-1-ptebeg,
+                    (*p1 & PTE_G) ? 'G' : '-',
+                    (*p1 & PTE_PS) ? 'S' : '-',
+                    (*p1 & PTE_D) ? 'D' : '-',
+                    (*p1 & PTE_A) ? 'A' : '-',
+                    (*p1 & PTE_PCD) ? 'C' : '-',
+                    (*p1 & PTE_PWT) ? 'T' : '-',
+                    (*p1 & PTE_U) ? 'U' : '-',
+                    (*p1 & PTE_W) ? 'W' : '-',
+                    (*p1 & PTE_P) ? 'P' : '-',
+                    PTE_ADDR(*p1), PTE_ADDR(*(pte-1))); 
+                p1 = pte;
             }
-            if (*p1 & PTE_P)
-                cprintf("[%08x-%08x] PTE[%04u-%04u] %c%c%c%c%c%c%c%c%c %08x .. %08x (phys)\n",
-                p1, pteend-1, p1-ptebeg, pteend-1-ptebeg,
-                (*p1 & PTE_G) ? 'G' : '-',
-                (*p1 & PTE_PS) ? 'S' : '-',
-                (*p1 & PTE_D) ? 'D' : '-',
-                (*p1 & PTE_A) ? 'A' : '-',
-                (*p1 & PTE_PCD) ? 'C' : '-',
-                (*p1 & PTE_PWT) ? 'T' : '-',
-                (*p1 & PTE_U) ? 'U' : '-',
-                (*p1 & PTE_W) ? 'W' : '-',
-                (*p1 & PTE_P) ? 'P' : '-',
-                PTE_ADDR(*p1), PTE_ADDR(*(pteend-1))); 
         }
+        if (*p1)
+            cprintf("[%08x-%08x] PTE[%04u-%04u] %c%c%c%c%c%c%c%c%c %08x .. %08x (phys)\n",
+            PGADDR(pde-pdebeg,p1-ptebeg,0), 
+            PGADDR(pde-pdebeg,pteend-1-ptebeg,0),
+            p1-ptebeg, pteend-1-ptebeg,
+            (*p1 & PTE_G) ? 'G' : '-',
+            (*p1 & PTE_PS) ? 'S' : '-',
+            (*p1 & PTE_D) ? 'D' : '-',
+            (*p1 & PTE_A) ? 'A' : '-',
+            (*p1 & PTE_PCD) ? 'C' : '-',
+            (*p1 & PTE_PWT) ? 'T' : '-',
+            (*p1 & PTE_U) ? 'U' : '-',
+            (*p1 & PTE_W) ? 'W' : '-',
+            (*p1 & PTE_P) ? 'P' : '-',
+            PTE_ADDR(*p1), PTE_ADDR(*(pteend-1))); 
     }
     return 0;
 }
