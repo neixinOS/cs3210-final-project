@@ -12,6 +12,8 @@
 #include <kern/kdebug.h>
 #include <kern/trap.h>
 
+#include <kern/pmap.h>
+
 #define CMDBUF_SIZE 80 // enough for one VGA text line
 
 
@@ -25,10 +27,126 @@ struct Command {
 static struct Command commands[] = {
   { "help",      "Display this list of commands",        mon_help       },
   { "info-kern", "Display information about the kernel", mon_infokern   },
+  { "backtrace", "Display backtrace info",               mon_backtrace  },
+  { "showmappings", "Show page mapping from range a to b", mon_showmappings  },
+  { "mapchmod", "Change the permission of mapping", mon_mapchmod},
+  { "memdump", "Dump the memory from a to b inclusive", mon_memdump},
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
 /***** Implementations of basic kernel monitor commands *****/
+
+int mon_memdump(int argc, char **argv, struct Trapframe *tf) {
+{
+  if (argc != 3) {
+    cprintf("USAGE: %s begin_addr end_addr", argv[0]);
+    return 1;
+  }
+
+  uintptr_t begin_addr = strtol(argv[1], NULL, 16);
+  uintptr_t end_addr = strtol(argv[2], NULL, 16);
+  for (uintptr_t addr = begin_addr; addr <= end_addr; addr+=0x10) {
+    //first make sure the memory region is mapped
+    pte_t* pteentry = pgdir_walk(kern_pgdir, (void*)addr, false);
+
+    cprintf("%016x: ", addr);
+    for (int j = 0; j < MIN(0x10, end_addr-addr); ++j)
+      if (pteentry && (*pteentry & PTE_P)) {
+        //the entry exist and is present
+        //this is supposed to be a paddr that's not specially mapped
+        cprintf("%02x ", *((unsigned char*)addr + j));
+      } else {
+        cprintf("%02x ", *((unsigned char*)KADDR(addr) + j));
+      }
+    cprintf("| ");
+    for (int j = 0; j < MIN(0x10, end_addr-addr); ++j) {
+      char c = (pteentry && (*pteentry & PTE_P)) ? *((char*)addr+j) : *((char*)KADDR(addr)+j);
+      cprintf("%c", isprint(c) ? c : '.');
+    }
+    cprintf("\n");
+  }
+  return 0;
+}
+}
+int mon_mapchmod(int argc, char **argv, struct Trapframe *tf) {
+  //expected way to call
+  //mapchmod +w +u 0xef0000000
+
+  if (argc <= 1) {
+    cprintf("USAGE: %s [+w] [+u] [-w] [-u] virtual_address\n", argv[0]);
+    return 1;
+  }
+  
+  //parse parameters
+  int user = 0, write = 0;
+  uintptr_t addr=0;
+  for (int i = 1; i < argc; ++i) {
+    switch(argv[i][0]) {
+      case '+':
+        switch (argv[i][1]) {
+          case 'u':
+            user = 1;
+            break;
+          case 'w':
+            write = 1;
+            break;
+          default:
+            cprintf("unknown parameter %s\n", argv[i]);
+            return 2;
+        }
+        break;
+      case '-':
+        switch (argv[i][1]) {
+          case 'u':
+            user = -1;
+            break;
+          case 'w':
+            write = -1;
+            break;
+          default:
+            cprintf("unknown parameter %s\n", argv[i]);
+            return 2;
+        }
+        break;
+      default:
+        addr=strtol(argv[i], NULL, 16);
+    }
+  }
+
+  pte_t* pteentry = pgdir_walk(kern_pgdir, (void*)addr, false);
+  if (pteentry && *pteentry & PTE_P) {
+    //the entry exsits and is present
+    *pteentry = (*pteentry | (user>0 ? PTE_U : 0) | (write>0 ? PTE_W : 0)) & (user<0 ? ~PTE_U: ~0) & (write<0 ? ~PTE_W: ~0);
+  } else {
+    cprintf("address %p does not point to a valid PTE\n", addr);
+    return 3;
+  }
+  return 0;
+}
+
+int mon_showmappings(int argc, char **argv, struct Trapframe *tf) {
+  if (argc != 3) {
+    cprintf("Show mapping require two parameters\n");
+    return 1;
+  }
+  //parse the parameters
+  uintptr_t begin=strtol(argv[1], NULL, 16)&(~0xFFF);
+  uintptr_t end=strtol(argv[2], NULL, 16)&(~0xFFF);
+  if (begin > end) {
+    cprintf("begin cannot be bigger than end\n");
+    return 2;
+  }
+  //then walk the table
+  for (uintptr_t i = begin; i<=end; i+=PGSIZE) {
+    pte_t* pteentry = pgdir_walk(kern_pgdir, (void*)i, false);
+    if (pteentry && *pteentry & PTE_P) {
+        cprintf("source: %p target: %p PTE_U: %s PTE_W %s\n",i,PTE_ADDR(*pteentry), PTE_U & *pteentry ? "true":"false", PTE_W & *pteentry ? "true":"false");
+    } else {
+      cprintf("source: %p target: Nomapping\n", i);
+    }
+  }
+  return 0;
+}
 
 int
 mon_help(int argc, char **argv, struct Trapframe *tf)
@@ -61,6 +179,17 @@ int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
   // Your code here.
+  cprintf("Stack backtrace:\n");
+  uint32_t* ebp = (uint32_t*) read_ebp();
+  struct Eipdebuginfo info;
+  while (0 != ebp) { 
+    cprintf("  ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n",
+            ebp, *(ebp+1), *(ebp+2), *(ebp+3), *(ebp+4), *(ebp+5), *(ebp+6));
+    debuginfo_eip(*(ebp+1), &info);
+    cprintf("         %s:%d:  %.*s+%d\n",
+            info.eip_file, info.eip_line,info.eip_fn_namelen, info.eip_fn_name, *(ebp+1)-info.eip_fn_addr);
+    ebp = (uint32_t*) *ebp;
+  }
   return 0;
 }
 
