@@ -154,11 +154,13 @@ mem_init(void)
   pages = (struct PageInfo *)boot_alloc(npages * sizeof(struct PageInfo)); 
   memset(pages, 0, npages * sizeof(struct PageInfo));
 
-  cprintf("%d number of pages\n", npages);
+  //cprintf("%d number of pages\n", npages);
   //panic("mem_init: This function is not finished\n");
   //////////////////////////////////////////////////////////////////////
   // Make 'envs' point to an array of size 'NENV' of 'struct Env'.
   // LAB 3: Your code here.
+  envs = (struct Env *)boot_alloc(NENV * sizeof(struct Env));
+  memset(pages, 0, NENV * sizeof(struct Env));
 
   //////////////////////////////////////////////////////////////////////
   // Now that we've allocated the initial kernel data structures, we set
@@ -195,7 +197,11 @@ mem_init(void)
   //    - the new image at UENVS  -- kernel R, user R
   //    - envs itself -- kernel RW, user NONE
   // LAB 3: Your code here.
-
+  // set up the new image
+  boot_map_region(kern_pgdir, UENVS, NENV*sizeof(struct Env), PADDR(envs), PTE_U | PTE_P);
+  // set the permission of the physical memory data
+  boot_map_region(kern_pgdir, (uintptr_t)envs, NENV*sizeof(struct Env), PADDR(envs), PTE_W | PTE_P);
+  
   //////////////////////////////////////////////////////////////////////
   // Use the physical memory that 'bootstack' refers to as the kernel
   // stack.  The kernel stack grows down from virtual address KSTACKTOP.
