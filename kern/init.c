@@ -30,10 +30,14 @@ i386_init(void)
 
   // Lab 2 memory management initialization functions
   mem_init();
+  cprintf("mem_init success!\n");//jowos
 
   // Lab 3 user environment initialization functions
   env_init();
+  cprintf("env_init success!\n");//jowos
+
   trap_init();
+  cprintf("trap_init success!\n");//jowos
 
 #if defined(TEST)
   // Don't touch -- used by grading script!
@@ -42,7 +46,7 @@ i386_init(void)
   // Touch all you want.
   ENV_CREATE(user_hello, ENV_TYPE_USER);
 #endif  // TEST*
-
+  cprintf("env_create success!\n");//jowos
   // We only have one user environment for now, so just run it.
   env_run(&envs[0]);
 }
