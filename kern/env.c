@@ -287,13 +287,16 @@ region_alloc(struct Env *e, void *va, size_t len)
   //   (Watch out for corner-cases!)
   uintptr_t rounded_va = ROUNDDOWN((uintptr_t)va, PGSIZE);
   size_t rounded_len = ROUNDUP((uintptr_t)va + len, PGSIZE) - rounded_va;
+  cprintf("rounded_va: %p rounded_len: %08x\n", rounded_va, rounded_len);
   size_t i;
   for (i = 0; i < rounded_len; i += PGSIZE) {
     struct PageInfo *pg = page_alloc(0);
     if (!pg) 
       panic("out of memory");
+    //cprintf("inserting: %p\n", rounded_va + i);
     if (0 > page_insert(e->env_pgdir, pg, (void *)rounded_va + i, PTE_U | PTE_W | PTE_P))
       panic("out of memory");
+    cprintf("allocating 1 page at %p\n", rounded_va + i);
   }
 }
 
@@ -334,6 +337,71 @@ va2pa(pde_t *pgdir, uintptr_t va)
 // load_icode panics if it encounters problems.
 //  - How might load_icode fail?  What might be wrong with the given input?
 //
+static void dump_pgdir() {
+    cprintf("cr3 = %08x (phys)\n", rcr3());
+    pde_t* pdebeg = KADDR(rcr3());
+    pde_t* pdeend = pdebeg+NPTENTRIES;
+    pde_t* pde = NULL;
+    for (pde=pdebeg; pde<pdeend; ++pde) {
+        if (!(*pde & PTE_P)) continue;
+        cprintf("[%08x-%08x]  PDE[%08x] %c%c%c%c%c%c%c%c%c\n",
+        PGADDR(pde-pdebeg,0,0), 
+        PGADDR(pde+1-pdebeg,0,0),
+        PTE_ADDR(*pde),
+        (*pde & PTE_G) ? 'G' : '-',
+        (*pde & PTE_PS) ? 'S' : '-',
+        (*pde & PTE_D) ? 'D' : '-',
+        (*pde & PTE_A) ? 'A' : '-',
+        (*pde & PTE_PCD) ? 'C' : '-',
+        (*pde & PTE_PWT) ? 'T' : '-',
+        (*pde & PTE_U) ? 'U' : '-',
+        (*pde & PTE_W) ? 'W' : '-',
+        (*pde & PTE_P) ? 'P' : '-'); 
+        //recursively walk through the PTE
+        pte_t* ptebeg = KADDR(PTE_ADDR(*pde));
+        pte_t* pteend = ptebeg+NPTENTRIES;
+        pte_t* p1=ptebeg;
+        pte_t* pte;
+        for (pte=ptebeg+1; pte<pteend; ++pte) {
+            if ((*p1 & 0xfff) == (*pte & 0xfff)) {
+                //the chunk is the same
+                continue;
+            } else {
+                if (*p1)
+                    cprintf("[%08x-%08x] PTE[%04u-%04u] %c%c%c%c%c%c%c%c%c %08x .. %08x (phys)\n",
+                    PGADDR(pde-pdebeg,p1-ptebeg,0), 
+                    PGADDR(pde-pdebeg,pte-1-ptebeg,0),
+                    p1-ptebeg, pte-1-ptebeg,
+                    (*p1 & PTE_G) ? 'G' : '-',
+                    (*p1 & PTE_PS) ? 'S' : '-',
+                    (*p1 & PTE_D) ? 'D' : '-',
+                    (*p1 & PTE_A) ? 'A' : '-',
+                    (*p1 & PTE_PCD) ? 'C' : '-',
+                    (*p1 & PTE_PWT) ? 'T' : '-',
+                    (*p1 & PTE_U) ? 'U' : '-',
+                    (*p1 & PTE_W) ? 'W' : '-',
+                    (*p1 & PTE_P) ? 'P' : '-',
+                    PTE_ADDR(*p1), PTE_ADDR(*(pte-1))); 
+                p1 = pte;
+            }
+        }
+        if (*p1)
+            cprintf("[%08x-%08x] PTE[%04u-%04u] %c%c%c%c%c%c%c%c%c %08x .. %08x (phys)\n",
+            PGADDR(pde-pdebeg,p1-ptebeg,0), 
+            PGADDR(pde-pdebeg,pteend-1-ptebeg,0),
+            p1-ptebeg, pteend-1-ptebeg,
+            (*p1 & PTE_G) ? 'G' : '-',
+            (*p1 & PTE_PS) ? 'S' : '-',
+            (*p1 & PTE_D) ? 'D' : '-',
+            (*p1 & PTE_A) ? 'A' : '-',
+            (*p1 & PTE_PCD) ? 'C' : '-',
+            (*p1 & PTE_PWT) ? 'T' : '-',
+            (*p1 & PTE_U) ? 'U' : '-',
+            (*p1 & PTE_W) ? 'W' : '-',
+            (*p1 & PTE_P) ? 'P' : '-',
+            PTE_ADDR(*p1), PTE_ADDR(*(pteend-1))); 
+    }
+}
 static void
 load_icode(struct Env *e, uint8_t *binary)
 {
@@ -369,24 +437,29 @@ load_icode(struct Env *e, uint8_t *binary)
   if (elfhdr->e_magic != ELF_MAGIC)
     panic("the elf is bad");
   
+  cprintf(">>>>>ELFheader<<<<<:\ne_entry: %08x\ne_phoff: %08x\ne_phnum: %08x\n",
+      elfhdr->e_entry, elfhdr->e_phoff, elfhdr->e_phnum);
   // load the elf program
   struct Proghdr *ph, *eph;
   // the first cast is for setting the offset per unit addition
   ph = (struct Proghdr *)((uint8_t *)elfhdr + elfhdr->e_phoff);
   eph = ph + elfhdr->e_phnum;
   for (; ph < eph; ++ph) {
-    cprintf("header: \np_type: %08x\np_offset: %08x\np_va: %08x\np_pa: %08x\np_filesz :%08x\np_memsz: %08x\np_flags: %08x\np_align: %08x\n",
+    /*cprintf(">>>>>header<<<<<: \np_type: %08x\np_offset: %08x\np_va: %08x\np_pa: %08x\np_filesz :%08x\np_memsz: %08x\np_flags: %08x\np_align: %08x\n",
         ph->p_type, ph->p_offset, ph->p_va,
         ph->p_pa, ph->p_filesz, ph->p_memsz,
-        ph->p_flags, ph->p_align);
+        ph->p_flags, ph->p_align);*/
+
     if (ph->p_type != ELF_PROG_LOAD) continue;
     cprintf("loading header! \n");
     //allocate the pages and virtual address
+    cprintf("calling region_alloc with: e=%p va=%p size=%08x\n", e, ph->p_va, ph->p_memsz);
     region_alloc(e, (void *)ph->p_va, ph->p_memsz);
     uint32_t cr3 = rcr3();
-    cprintf("read cr3: %08x\n", cr3);
-    cprintf("to load cr3: %08x\n", PADDR(e->env_pgdir));
+    //cprintf("read cr3: %08x\n", cr3);
+    //cprintf("to load cr3: %08x\n", PADDR(e->env_pgdir));
     lcr3(PADDR(e->env_pgdir));
+    //dump_pgdir();
     //set memsz of memory to zero
     //DONE: but the memory is not accessible at location pa
     //even if you find the pa of the allocated region, the pa will not be
@@ -399,14 +472,13 @@ load_icode(struct Env *e, uint8_t *binary)
     //of e->env_pde into physical addresses
     //
     //The best solution is to temporarily lcr3 with the env_pgdir
-    panic("yo");
-    size_t offset;
-    for (offset = 0; offset < ph->p_memsz; offset += PGSIZE)
-      memset((void *)(ph->p_va + offset), 0, PGSIZE);
+    //cprintf("content at ph->p_va: %08x\n", *(uint32_t *)ph->p_va);
+    memset((void *)ph->p_va, 0, ph->p_memsz);
     //copy the code into the pages
     void *pbeg = (void *)(binary + ph->p_offset);
-    for (offset = 0; offset < ph->p_filesz; offset += PGSIZE)
-      memcpy((void *)(ph->p_va+offset), pbeg+offset, MIN(ph->p_filesz - offset, PGSIZE));
+    cprintf("first word of section: %08x\n", *(uint32_t*)pbeg);
+    memcpy((void *)ph->p_va, pbeg, ph->p_filesz);
+    cprintf("copied word of section: %08x\n", *(uint32_t*)ph->p_va);
     lcr3((uint32_t)cr3);
   }
   // Now map one page for the program's initial stack
@@ -524,12 +596,12 @@ env_destroy(struct Env *e)
 void
 env_pop_tf(struct Trapframe *tf)
 {
-  __asm __volatile("movl %0,%%esp\n"
-                   "\tpopal\n"
-                   "\tpopl %%es\n"
-                   "\tpopl %%ds\n"
+  __asm __volatile("movl %0,%%esp\n" //load the tf pointer into esp
+                   "\tpopal\n" //pop the pushregs 
+                   "\tpopl %%es\n" //pop es
+                   "\tpopl %%ds\n" //pop ds
                    "\taddl $0x8,%%esp\n" /* skip tf_trapno and tf_errcode */
-                   "\tiret"
+                   "\tiret" //pop eip and cs
                    : : "g" (tf) : "memory");
   panic("iret failed");        /* mostly to placate the compiler */
 }
@@ -559,6 +631,8 @@ env_run(struct Env *e)
   //	e->env_tf.  Go back through the code you wrote above
   //	and make sure you have set the relevant parts of
   //	e->env_tf to sensible values.
+  cprintf("running env: %d\n", e->env_id);
+  cprintf("eip in trapframe: %p\n", e->env_tf.tf_eip);
   if (curenv && curenv->env_status == ENV_RUNNING)
     curenv->env_status = ENV_RUNNABLE;
 
@@ -566,6 +640,9 @@ env_run(struct Env *e)
   curenv->env_status = ENV_RUNNING;
   ++curenv->env_runs;
   lcr3(PADDR(curenv->env_pgdir));
+  dump_pgdir();
+  cprintf("word to execute: %16x\n", *(uint64_t*)0x800020);
+  //panic("yo");
   env_pop_tf(&curenv->env_tf);
 }
 

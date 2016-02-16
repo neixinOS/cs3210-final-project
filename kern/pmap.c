@@ -402,12 +402,12 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 {
   // Fill this function in
   // get the pde entry
-  pde_t pdeentry = pgdir[PDX(va)];
+  pde_t pdeentry = pgdir[PDX((uintptr_t)va)];
   if (pdeentry & PTE_P) {
     //the entry is valid
     // get the pte entry
     pte_t* result = (pte_t*)KADDR(PTE_ADDR(pdeentry));
-    result += PTX(va);
+    result += PTX((uintptr_t)va);
     return result;
   } else {
     //the entry is invalid
@@ -419,10 +419,10 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
         newpg->pp_ref = 1;
         //record the page address into pde
         pdeentry=(uintptr_t)page2pa(newpg) | PTE_P | PTE_W | PTE_U; 
-        pgdir[PDX(va)]=pdeentry;
+        pgdir[PDX((uintptr_t)va)]=pdeentry;
         //get the virtual addr to pte for dereferencing
         pte_t* pteaddr = (pte_t*)page2kva(newpg);
-        pteaddr += PTX(va); //TODO: make sure this works
+        pteaddr += PTX((uintptr_t)va); //TODO: make sure this works
         return pteaddr;
       } else {
         return NULL;
@@ -450,7 +450,8 @@ boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm
 {
   // Fill this function in
   cprintf("mapping: %p -> %p size %08x\n", va, pa, size);
-  for (size_t i = 0; i < size; i+=PGSIZE) {
+  size_t i;
+  for (i = 0; i < size; i+=PGSIZE) {
     pte_t* pteentry = pgdir_walk(pgdir, (void*)(va+i), true);
     *(pteentry) = PTE_ADDR(pa+i) | perm | PTE_P;
   }
@@ -486,12 +487,12 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 {
   // Fill this function in
   //check requirement 1
-  pte_t* pteptr = pgdir_walk(kern_pgdir, va, true);
+  pte_t* pteptr = pgdir_walk(pgdir, va, true);
   if (!pteptr) return -E_NO_MEM;
   ++pp->pp_ref;
   if (*pteptr & PTE_P) {
     //there's already a page mapped
-    page_remove(kern_pgdir, va);
+    page_remove(pgdir, va);
   }
   *pteptr = PTE_ADDR(page2pa(pp)) | perm | PTE_P;
   return 0;
@@ -542,11 +543,11 @@ page_remove(pde_t *pgdir, void *va)
 {
   // Fill this function in
   pte_t *pte_store;
-  struct PageInfo* pg = page_lookup(kern_pgdir, va, &pte_store);
+  struct PageInfo* pg = page_lookup(pgdir, va, &pte_store);
   if (pg) {
     page_decref(pg);
     *pte_store = 0;
-    tlb_invalidate(kern_pgdir, va);
+    tlb_invalidate(pgdir, va);
   }
 }
 

@@ -64,8 +64,42 @@ trap_init(void)
 {
   extern struct Segdesc gdt[];
 
-
-  // LAB 3: Your code here.
+  extern void trap_divide(void);
+  extern void trap_debug(void);
+  extern void trap_nmi(void);
+  extern void trap_brkpt(void);
+  extern void trap_oflow(void);
+  extern void trap_bound(void);
+  extern void trap_illop(void);
+  extern void trap_device(void);
+  extern void trap_dblflt(void);
+  extern void trap_tss(void);
+  extern void trap_segnp(void);
+  extern void trap_stack(void);
+  extern void trap_gpflt(void);
+  extern void trap_pgflt(void);
+  extern void trap_fperr(void);
+  extern void trap_align(void);
+  extern void trap_mchk(void);
+  extern void trap_simderr(void);
+  SETGATE(idt[T_DIVIDE], 1, GD_KT, trap_divide, 0);
+  SETGATE(idt[T_DEBUG], 1, GD_KT, trap_debug, 0);
+  SETGATE(idt[T_NMI], 1, GD_KT, trap_nmi, 0);
+  SETGATE(idt[T_BRKPT], 1, GD_KT, trap_brkpt, 0);
+  SETGATE(idt[T_OFLOW], 1, GD_KT, trap_oflow, 0);
+  SETGATE(idt[T_BOUND], 1, GD_KT, trap_bound, 0);
+  SETGATE(idt[T_ILLOP], 1, GD_KT, trap_illop, 0);
+  SETGATE(idt[T_DEVICE], 1, GD_KT, trap_device, 0);
+  SETGATE(idt[T_DBLFLT], 1, GD_KT, trap_dblflt, 0);
+  SETGATE(idt[T_TSS], 1, GD_KT, trap_tss, 0);
+  SETGATE(idt[T_SEGNP], 1, GD_KT, trap_segnp, 0);
+  SETGATE(idt[T_STACK], 1, GD_KT, trap_stack, 0);
+  SETGATE(idt[T_GPFLT], 1, GD_KT, trap_gpflt, 0);
+  SETGATE(idt[T_PGFLT], 1, GD_KT, trap_pgflt, 0);
+  SETGATE(idt[T_FPERR], 1, GD_KT, trap_fperr, 0);
+  SETGATE(idt[T_ALIGN], 1, GD_KT, trap_align, 0);
+  SETGATE(idt[T_MCHK], 1, GD_KT, trap_mchk, 0);
+  SETGATE(idt[T_SIMDERR], 1, GD_KT, trap_simderr, 0);
 
   // Per-CPU setup
   trap_init_percpu();

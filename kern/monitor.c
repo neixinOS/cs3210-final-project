@@ -40,7 +40,8 @@ int mon_infopg(int argc, char **argv, struct Trapframe *tf) {
     cprintf("cr3 = %08x (phys)\n", rcr3());
     pde_t* pdebeg = KADDR(rcr3());
     pde_t* pdeend = pdebeg+NPTENTRIES;
-    for (pde_t* pde=pdebeg; pde<pdeend; ++pde) {
+    pde_t* pde = NULL;
+    for (pde=pdebeg; pde<pdeend; ++pde) {
         if (!(*pde & PTE_P)) continue;
         cprintf("[%08x-%08x]  PDE[%08x] %c%c%c%c%c%c%c%c%c\n",
         PGADDR(pde-pdebeg,0,0), 
@@ -59,7 +60,8 @@ int mon_infopg(int argc, char **argv, struct Trapframe *tf) {
         pte_t* ptebeg = KADDR(PTE_ADDR(*pde));
         pte_t* pteend = ptebeg+NPTENTRIES;
         pte_t* p1=ptebeg;
-        for (pte_t* pte=ptebeg+1; pte<pteend; ++pte) {
+        pte_t* pte;
+        for (pte=ptebeg+1; pte<pteend; ++pte) {
             if ((*p1 & 0xfff) == (*pte & 0xfff)) {
                 //the chunk is the same
                 continue;
@@ -110,12 +112,14 @@ int mon_memdump(int argc, char **argv, struct Trapframe *tf) {
 
   uintptr_t begin_addr = strtol(argv[1], NULL, 16);
   uintptr_t end_addr = strtol(argv[2], NULL, 16);
-  for (uintptr_t addr = begin_addr; addr <= end_addr; addr+=0x10) {
+  uintptr_t addr;
+  for (addr = begin_addr; addr <= end_addr; addr+=0x10) {
     //first make sure the memory region is mapped
     pte_t* pteentry = pgdir_walk(kern_pgdir, (void*)addr, false);
 
     cprintf("%016x: ", addr);
-    for (int j = 0; j < MIN(0x10, end_addr-addr); ++j)
+    int j = 0;
+    for (j = 0; j < MIN(0x10, end_addr-addr); ++j)
       if (pteentry && (*pteentry & PTE_P)) {
         //the entry exist and is present
         //this is supposed to be a paddr that's not specially mapped
@@ -124,7 +128,7 @@ int mon_memdump(int argc, char **argv, struct Trapframe *tf) {
         cprintf("%02x ", *((unsigned char*)KADDR(addr) + j));
       }
     cprintf("| ");
-    for (int j = 0; j < MIN(0x10, end_addr-addr); ++j) {
+    for (j = 0; j < MIN(0x10, end_addr-addr); ++j) {
       char c = (pteentry && (*pteentry & PTE_P)) ? *((char*)addr+j) : *((char*)KADDR(addr)+j);
       cprintf("%c", isprint(c) ? c : '.');
     }
@@ -145,7 +149,8 @@ int mon_mapchmod(int argc, char **argv, struct Trapframe *tf) {
   //parse parameters
   int user = 0, write = 0;
   uintptr_t addr=0;
-  for (int i = 1; i < argc; ++i) {
+  int i;
+  for (i = 1; i < argc; ++i) {
     switch(argv[i][0]) {
       case '+':
         switch (argv[i][1]) {
@@ -178,7 +183,7 @@ int mon_mapchmod(int argc, char **argv, struct Trapframe *tf) {
     }
   }
 
-  pte_t* pteentry = pgdir_walk(kern_pgdir, (void*)addr, false);
+  pte_t* pteentry = pgdir_walk(kern_pgdir, (void *)addr, false);
   if (pteentry && *pteentry & PTE_P) {
     //the entry exsits and is present
     *pteentry = (*pteentry | (user>0 ? PTE_U : 0) | (write>0 ? PTE_W : 0)) & (user<0 ? ~PTE_U: ~0) & (write<0 ? ~PTE_W: ~0);
@@ -202,7 +207,8 @@ int mon_showmappings(int argc, char **argv, struct Trapframe *tf) {
     return 2;
   }
   //then walk the table
-  for (uintptr_t i = begin; i<=end; i+=PGSIZE) {
+  uintptr_t i;
+  for (i = begin; i<=end; i+=PGSIZE) {
     pte_t* pteentry = pgdir_walk(kern_pgdir, (void*)i, false);
     if (pteentry && *pteentry & PTE_P) {
         cprintf("source: %p target: %p PTE_U: %s PTE_W %s\n",i,PTE_ADDR(*pteentry), PTE_U & *pteentry ? "true":"false", PTE_W & *pteentry ? "true":"false");
@@ -217,7 +223,6 @@ int
 mon_help(int argc, char **argv, struct Trapframe *tf)
 {
   int i;
-
   for (i = 0; i < NCOMMANDS; i++)
     cprintf("%s - %s\n", commands[i].name, commands[i].desc);
   return 0;
