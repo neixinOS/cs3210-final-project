@@ -3,3 +3,11 @@
 trigger it. Since the user code in softint wants to trigger 14, the violation
 results in general protection instead. If user code is allowed to produce page
 fault, it could be exploited by malicious code 
+3. Similar to Q2, if the DPL is set to 0, then only kernel is able to invoke it.
+In order for user code to properly trigger breakpoint trap I need to set DPL to
+4. Prevent user code from intentiously breaking the execution to mess up the
+kernel.
+
+Challenge: Implemented the first challenge by utilizing the .data segments. A
+standalone code snippet is written to set up the label address later on in the
+trap_init

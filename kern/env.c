@@ -640,8 +640,8 @@ env_run(struct Env *e)
   curenv->env_status = ENV_RUNNING;
   ++curenv->env_runs;
   lcr3(PADDR(curenv->env_pgdir));
-  dump_pgdir();
-  cprintf("word to execute: %16x\n", *(uint64_t*)0x800020);
+  //dump_pgdir();
+  //cprintf("word to execute: %16x\n", *(uint64_t*)0x800020);
   //panic("yo");
   env_pop_tf(&curenv->env_tf);
 }

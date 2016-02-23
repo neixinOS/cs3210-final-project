@@ -4,7 +4,13 @@
 #include <inc/memlayout.h>
 #include <inc/trap.h>
 
-
+.data
+.global idt_beg
+idt_beg:
+.space 8*256
+.global idt_end
+idt_end:
+.text
 
 ###################################################################
 # exceptions/interrupts
@@ -21,6 +27,7 @@
  * where NAME is the argument passed to TRAPHANDLER.
  */
 #define TRAPHANDLER(name, num)                                          \
+ .text;\
         .globl name;            /* define global symbol for 'name' */   \
         .type name, @function;  /* symbol type is function */           \
         .align 2;               /* align function definition */         \
@@ -33,15 +40,62 @@
  * format in either case.
  */
 #define TRAPHANDLER_NOEC(name, num)                                     \
+.text;                                                                  \
         .globl name;                                                    \
         .type name, @function;                                          \
         .align 2;                                                       \
         name:                                                           \
         pushl $0;                                                       \
         pushl $(num);                                                   \
-        jmp _alltraps
+        jmp _alltraps;                                                  
 
-.text
+#define SETTG(name, num, sel, off, dpl) \
+.text;\
+        .global trap_divide_setup;\
+        trap_divide_setup:\
+        pushal;\
+        movl $idt_beg, %ebx;\
+        movl $num, %ecx;\
+        lea (%ebx, %ecx, 8), %ebx;\
+        movl $off, 0(%ebx);\
+        movl $off, 4(%ebx);\
+        movw $sel, 2(%ebx);\
+        movb $0, 4(%ebx);\
+        movb $STS_TG32, %al;\
+        movb $dpl, %dl;\
+        and $0x3, %dl;\
+        shl $0x5, %dl;\
+        or %dl, %al;\
+        or $0b10000000, %al;\
+        movb %al, 5(%ebx);\
+        ret;
+
+#define SETIG(name, sel, off, dpl) \
+.text;\
+        .global name\
+        name:\
+        movl off, 0(idt_beg,num,8);\
+        movl off, 4(idt_beg,num,8);\
+        movw $sel, 2(idt_beg,num,8);\
+        movb $0, 4(idt_beg,num,8);\
+        movb $STS_IG32, %al;\
+        movb $dpl, %dl;\
+        and $0x3, %dl;\
+        shl $0x5, %dl;\
+        or %dl, %al;\
+        or $0b10000000, %al;\
+        movb %al, 5(idt_beg,num,8);\
+        ret;
+/*
+#define SETIG(sel, off, dpl) \
+.data;\
+        .word $off & 0xffff;\
+        .word $sel;\
+        .space 1;\
+        .byte 0b10000000 | (($dpl & 0x3)<<5) | STS_TG32;\
+        .word $off >> 16;
+
+.text*/
 
 /*
  * Lab 3: Your code here for generating entry points for the different traps.
@@ -65,6 +119,8 @@ TRAPHANDLER_NOEC(trap_fperr, T_FPERR)
 TRAPHANDLER(trap_align, T_ALIGN)
 TRAPHANDLER_NOEC(trap_mchk, T_MCHK)
 TRAPHANDLER_NOEC(trap_simderr, T_SIMDERR)
+//syscall handler
+TRAPHANDLER_NOEC(trap_syscall, T_SYSCALL)
 
 /*
  * Lab 3: Your code here for _alltraps
@@ -79,3 +135,7 @@ movl %eax, %ds;
 movl %eax, %es;
 pushl %esp;
 call trap;
+
+.data
+.global idt_info_end
+idt_info_end:
