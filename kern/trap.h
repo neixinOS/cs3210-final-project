@@ -10,7 +10,7 @@
 #include <inc/mmu.h>
 
 /* The kernel's interrupt descriptor table */
-extern struct Gatedesc idt[];
+extern struct Gatedesc *idt;
 extern struct Pseudodesc idt_pd;
 
 void trap_init(void);

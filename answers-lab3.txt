@@ -9,3 +9,5 @@ In order for user code to properly trigger breakpoint trap I need to set DPL to
 kernel.
 
 Challenge: Implemented the second challenge with mon_continue and mon_si
+Challenge: Defined a macro in trapentry.S to automatically lay down initializers
+and modified kern/trap.h kern/trap.c to call the initializer in trap_init 

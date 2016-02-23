@@ -20,11 +20,14 @@ static struct Trapframe *last_tf;
 /* Interrupt descriptor table.  (Must be built at run time because
  * shifted function addresses can't be represented in relocation records.)
  */
+/*
 struct Gatedesc idt[256] = { { 0 } };
 struct Pseudodesc idt_pd = {
   sizeof(idt) - 1, (uint32_t)idt
-};
+};*/
 
+struct Gatedesc *idt;
+struct Pseudodesc idt_pd;
 
 static const char *trapname(int trapno)
 {
@@ -63,7 +66,7 @@ void
 trap_init(void)
 {
   extern struct Segdesc gdt[];
-
+ /*
   extern void trap_divide(void);
   extern void trap_debug(void);
   extern void trap_nmi(void);
@@ -102,7 +105,16 @@ trap_init(void)
   SETGATE(idt[T_MCHK], 1, GD_KT, trap_mchk, 0);
   SETGATE(idt[T_SIMDERR], 1, GD_KT, trap_simderr, 0);
   SETGATE(idt[T_SYSCALL], 1, GD_KT, trap_syscall, 3);
+  */
 
+  extern void idt_setup(void);
+  idt_setup();
+
+  extern void *idt_beg;
+  idt = (struct Gatedesc*) &idt_beg;
+  idt_pd.pd_lim = 8*256 - 1;
+  idt_pd.pd_base = (uint32_t)&idt_beg;
+  
   // Per-CPU setup
   trap_init_percpu();
 }
