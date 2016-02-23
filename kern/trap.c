@@ -182,6 +182,7 @@ trap_dispatch(struct Trapframe *tf)
   // LAB 3: Your code here.
   print_trapframe(tf);
   switch (tf->tf_trapno) {
+    case T_DEBUG:
     case T_BRKPT:
       monitor(tf);
       break;

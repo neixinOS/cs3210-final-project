@@ -8,6 +8,4 @@ In order for user code to properly trigger breakpoint trap I need to set DPL to
 4. Prevent user code from intentiously breaking the execution to mess up the
 kernel.
 
-Challenge: Implemented the first challenge by utilizing the .data segments. A
-standalone code snippet is written to set up the label address later on in the
-trap_init
+Challenge: Implemented the second challenge with mon_continue and mon_si

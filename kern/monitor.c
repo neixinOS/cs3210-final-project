@@ -11,6 +11,7 @@
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
 #include <kern/trap.h>
+#include <kern/env.h>
 
 #include <kern/pmap.h>
 
@@ -32,10 +33,31 @@ static struct Command commands[] = {
   { "mapchmod", "Change the permission of mapping", mon_mapchmod},
   { "memdump", "Dump the memory from a to b inclusive", mon_memdump},
   { "info-pg", "print the paging information", mon_infopg},
+  { "continue", "continue from curenv", mon_continue },
+  { "si", "single step in curenv", mon_si },
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
 /***** Implementations of basic kernel monitor commands *****/
+int mon_si(int argc, char **argv, struct Trapframe *tf) {
+    if (curenv && curenv->env_status == ENV_RUNNING && tf) {
+        uint32_t eflags = read_eflags();
+        eflags = eflags | 0x100;
+        write_eflags(eflags);
+        env_pop_tf(tf);
+    }
+    cprintf("no running curenv\n");
+    return 0;
+}
+int mon_continue(int argc, char **argv, struct Trapframe *tf) {
+    if (curenv && curenv->env_status == ENV_RUNNING && tf) {
+        env_pop_tf(tf);
+    }
+    cprintf("no running curenv\n");
+    return 0;
+}
+
+
 int mon_infopg(int argc, char **argv, struct Trapframe *tf) {
     cprintf("cr3 = %08x (phys)\n", rcr3());
     pde_t* pdebeg = KADDR(rcr3());
