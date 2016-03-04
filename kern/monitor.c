@@ -11,6 +11,9 @@
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
 #include <kern/trap.h>
+#include <kern/env.h>
+
+#include <kern/pmap.h>
 
 #define CMDBUF_SIZE 80 // enough for one VGA text line
 
@@ -25,16 +28,223 @@ struct Command {
 static struct Command commands[] = {
   { "help",      "Display this list of commands",        mon_help       },
   { "info-kern", "Display information about the kernel", mon_infokern   },
+  { "backtrace", "Display backtrace info",               mon_backtrace  },
+  { "showmappings", "Show page mapping from range a to b", mon_showmappings  },
+  { "mapchmod", "Change the permission of mapping", mon_mapchmod},
+  { "memdump", "Dump the memory from a to b inclusive", mon_memdump},
+  { "info-pg", "print the paging information", mon_infopg},
+  { "continue", "continue from curenv", mon_continue },
+  { "si", "single step in curenv", mon_si },
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
 /***** Implementations of basic kernel monitor commands *****/
+int mon_si(int argc, char **argv, struct Trapframe *tf) {
+    if (curenv && curenv->env_status == ENV_RUNNING && tf) {
+        uint32_t eflags = read_eflags();
+        eflags = eflags | 0x100;
+        write_eflags(eflags);
+        env_pop_tf(tf);
+    }
+    cprintf("no running curenv\n");
+    return 0;
+}
+int mon_continue(int argc, char **argv, struct Trapframe *tf) {
+    if (curenv && curenv->env_status == ENV_RUNNING && tf) {
+        env_pop_tf(tf);
+    }
+    cprintf("no running curenv\n");
+    return 0;
+}
+
+
+int mon_infopg(int argc, char **argv, struct Trapframe *tf) {
+    cprintf("cr3 = %08x (phys)\n", rcr3());
+    pde_t* pdebeg = KADDR(rcr3());
+    pde_t* pdeend = pdebeg+NPTENTRIES;
+    pde_t* pde = NULL;
+    for (pde=pdebeg; pde<pdeend; ++pde) {
+        if (!(*pde & PTE_P)) continue;
+        cprintf("[%08x-%08x]  PDE[%08x] %c%c%c%c%c%c%c%c%c\n",
+        PGADDR(pde-pdebeg,0,0), 
+        PGADDR(pde+1-pdebeg,0,0),
+        PTE_ADDR(*pde),
+        (*pde & PTE_G) ? 'G' : '-',
+        (*pde & PTE_PS) ? 'S' : '-',
+        (*pde & PTE_D) ? 'D' : '-',
+        (*pde & PTE_A) ? 'A' : '-',
+        (*pde & PTE_PCD) ? 'C' : '-',
+        (*pde & PTE_PWT) ? 'T' : '-',
+        (*pde & PTE_U) ? 'U' : '-',
+        (*pde & PTE_W) ? 'W' : '-',
+        (*pde & PTE_P) ? 'P' : '-'); 
+        //recursively walk through the PTE
+        pte_t* ptebeg = KADDR(PTE_ADDR(*pde));
+        pte_t* pteend = ptebeg+NPTENTRIES;
+        pte_t* p1=ptebeg;
+        pte_t* pte;
+        for (pte=ptebeg+1; pte<pteend; ++pte) {
+            if ((*p1 & 0xfff) == (*pte & 0xfff)) {
+                //the chunk is the same
+                continue;
+            } else {
+                if (*p1)
+                    cprintf("[%08x-%08x] PTE[%04u-%04u] %c%c%c%c%c%c%c%c%c %08x .. %08x (phys)\n",
+                    PGADDR(pde-pdebeg,p1-ptebeg,0), 
+                    PGADDR(pde-pdebeg,pte-1-ptebeg,0),
+                    p1-ptebeg, pte-1-ptebeg,
+                    (*p1 & PTE_G) ? 'G' : '-',
+                    (*p1 & PTE_PS) ? 'S' : '-',
+                    (*p1 & PTE_D) ? 'D' : '-',
+                    (*p1 & PTE_A) ? 'A' : '-',
+                    (*p1 & PTE_PCD) ? 'C' : '-',
+                    (*p1 & PTE_PWT) ? 'T' : '-',
+                    (*p1 & PTE_U) ? 'U' : '-',
+                    (*p1 & PTE_W) ? 'W' : '-',
+                    (*p1 & PTE_P) ? 'P' : '-',
+                    PTE_ADDR(*p1), PTE_ADDR(*(pte-1))); 
+                p1 = pte;
+            }
+        }
+        if (*p1)
+            cprintf("[%08x-%08x] PTE[%04u-%04u] %c%c%c%c%c%c%c%c%c %08x .. %08x (phys)\n",
+            PGADDR(pde-pdebeg,p1-ptebeg,0), 
+            PGADDR(pde-pdebeg,pteend-1-ptebeg,0),
+            p1-ptebeg, pteend-1-ptebeg,
+            (*p1 & PTE_G) ? 'G' : '-',
+            (*p1 & PTE_PS) ? 'S' : '-',
+            (*p1 & PTE_D) ? 'D' : '-',
+            (*p1 & PTE_A) ? 'A' : '-',
+            (*p1 & PTE_PCD) ? 'C' : '-',
+            (*p1 & PTE_PWT) ? 'T' : '-',
+            (*p1 & PTE_U) ? 'U' : '-',
+            (*p1 & PTE_W) ? 'W' : '-',
+            (*p1 & PTE_P) ? 'P' : '-',
+            PTE_ADDR(*p1), PTE_ADDR(*(pteend-1))); 
+    }
+    return 0;
+}
+
+int mon_memdump(int argc, char **argv, struct Trapframe *tf) {
+{
+  if (argc != 3) {
+    cprintf("USAGE: %s begin_addr end_addr", argv[0]);
+    return 1;
+  }
+
+  uintptr_t begin_addr = strtol(argv[1], NULL, 16);
+  uintptr_t end_addr = strtol(argv[2], NULL, 16);
+  uintptr_t addr;
+  for (addr = begin_addr; addr <= end_addr; addr+=0x10) {
+    //first make sure the memory region is mapped
+    pte_t* pteentry = pgdir_walk(kern_pgdir, (void*)addr, false);
+
+    cprintf("%016x: ", addr);
+    int j = 0;
+    for (j = 0; j < MIN(0x10, end_addr-addr); ++j)
+      if (pteentry && (*pteentry & PTE_P)) {
+        //the entry exist and is present
+        //this is supposed to be a paddr that's not specially mapped
+        cprintf("%02x ", *((unsigned char*)addr + j));
+      } else {
+        cprintf("%02x ", *((unsigned char*)KADDR(addr) + j));
+      }
+    cprintf("| ");
+    for (j = 0; j < MIN(0x10, end_addr-addr); ++j) {
+      char c = (pteentry && (*pteentry & PTE_P)) ? *((char*)addr+j) : *((char*)KADDR(addr)+j);
+      cprintf("%c", isprint(c) ? c : '.');
+    }
+    cprintf("\n");
+  }
+  return 0;
+}
+}
+int mon_mapchmod(int argc, char **argv, struct Trapframe *tf) {
+  //expected way to call
+  //mapchmod +w +u 0xef0000000
+
+  if (argc <= 1) {
+    cprintf("USAGE: %s [+w] [+u] [-w] [-u] virtual_address\n", argv[0]);
+    return 1;
+  }
+  
+  //parse parameters
+  int user = 0, write = 0;
+  uintptr_t addr=0;
+  int i;
+  for (i = 1; i < argc; ++i) {
+    switch(argv[i][0]) {
+      case '+':
+        switch (argv[i][1]) {
+          case 'u':
+            user = 1;
+            break;
+          case 'w':
+            write = 1;
+            break;
+          default:
+            cprintf("unknown parameter %s\n", argv[i]);
+            return 2;
+        }
+        break;
+      case '-':
+        switch (argv[i][1]) {
+          case 'u':
+            user = -1;
+            break;
+          case 'w':
+            write = -1;
+            break;
+          default:
+            cprintf("unknown parameter %s\n", argv[i]);
+            return 2;
+        }
+        break;
+      default:
+        addr=strtol(argv[i], NULL, 16);
+    }
+  }
+
+  pte_t* pteentry = pgdir_walk(kern_pgdir, (void *)addr, false);
+  if (pteentry && *pteentry & PTE_P) {
+    //the entry exsits and is present
+    *pteentry = (*pteentry | (user>0 ? PTE_U : 0) | (write>0 ? PTE_W : 0)) & (user<0 ? ~PTE_U: ~0) & (write<0 ? ~PTE_W: ~0);
+  } else {
+    cprintf("address %p does not point to a valid PTE\n", addr);
+    return 3;
+  }
+  return 0;
+}
+
+int mon_showmappings(int argc, char **argv, struct Trapframe *tf) {
+  if (argc != 3) {
+    cprintf("Show mapping require two parameters\n");
+    return 1;
+  }
+  //parse the parameters
+  uintptr_t begin=strtol(argv[1], NULL, 16)&(~0xFFF);
+  uintptr_t end=strtol(argv[2], NULL, 16)&(~0xFFF);
+  if (begin > end) {
+    cprintf("begin cannot be bigger than end\n");
+    return 2;
+  }
+  //then walk the table
+  uintptr_t i;
+  for (i = begin; i<=end; i+=PGSIZE) {
+    pte_t* pteentry = pgdir_walk(kern_pgdir, (void*)i, false);
+    if (pteentry && *pteentry & PTE_P) {
+        cprintf("source: %p target: %p PTE_U: %s PTE_W %s\n",i,PTE_ADDR(*pteentry), PTE_U & *pteentry ? "true":"false", PTE_W & *pteentry ? "true":"false");
+    } else {
+      cprintf("source: %p target: Nomapping\n", i);
+    }
+  }
+  return 0;
+}
 
 int
 mon_help(int argc, char **argv, struct Trapframe *tf)
 {
   int i;
-
   for (i = 0; i < NCOMMANDS; i++)
     cprintf("%s - %s\n", commands[i].name, commands[i].desc);
   return 0;
@@ -61,10 +271,19 @@ int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
   // Your code here.
+  cprintf("Stack backtrace:\n");
+  uint32_t* ebp = (uint32_t*) read_ebp();
+  struct Eipdebuginfo info;
+  while (0 != ebp) { 
+    cprintf("  ebp %08x  eip %08x  args %08x %08x %08x %08x %08x\n",
+            ebp, *(ebp+1), *(ebp+2), *(ebp+3), *(ebp+4), *(ebp+5), *(ebp+6));
+    debuginfo_eip(*(ebp+1), &info);
+    cprintf("         %s:%d:  %.*s+%d\n",
+            info.eip_file, info.eip_line,info.eip_fn_namelen, info.eip_fn_name, *(ebp+1)-info.eip_fn_addr);
+    ebp = (uint32_t*) *ebp;
+  }
   return 0;
 }
-
-
 
 /***** Kernel monitor command interpreter *****/
 

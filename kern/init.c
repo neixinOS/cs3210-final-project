@@ -36,10 +36,14 @@ i386_init(void)
 
   // Lab 2 memory management initialization functions
   mem_init();
+  cprintf("mem_init success!\n");//jowos
 
   // Lab 3 user environment initialization functions
   env_init();
+  cprintf("env_init success!\n");//jowos
+
   trap_init();
+  cprintf("trap_init success!\n");//jowos
 
   // Lab 4 multiprocessor initialization functions
   mp_init();

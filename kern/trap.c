@@ -25,11 +25,14 @@ static struct Trapframe *last_tf;
 /* Interrupt descriptor table.  (Must be built at run time because
  * shifted function addresses can't be represented in relocation records.)
  */
+/*
 struct Gatedesc idt[256] = { { 0 } };
 struct Pseudodesc idt_pd = {
   sizeof(idt) - 1, (uint32_t)idt
-};
+};*/
 
+struct Gatedesc *idt;
+struct Pseudodesc idt_pd;
 
 static const char *trapname(int trapno)
 {
@@ -70,10 +73,55 @@ void
 trap_init(void)
 {
   extern struct Segdesc gdt[];
+ /*
+  extern void trap_divide(void);
+  extern void trap_debug(void);
+  extern void trap_nmi(void);
+  extern void trap_brkpt(void);
+  extern void trap_oflow(void);
+  extern void trap_bound(void);
+  extern void trap_illop(void);
+  extern void trap_device(void);
+  extern void trap_dblflt(void);
+  extern void trap_tss(void);
+  extern void trap_segnp(void);
+  extern void trap_stack(void);
+  extern void trap_gpflt(void);
+  extern void trap_pgflt(void);
+  extern void trap_fperr(void);
+  extern void trap_align(void);
+  extern void trap_mchk(void);
+  extern void trap_simderr(void);
+  extern void trap_syscall(void);
+  SETGATE(idt[T_DIVIDE], 1, GD_KT, trap_divide, 0);
+  SETGATE(idt[T_DEBUG], 1, GD_KT, trap_debug, 0);
+  SETGATE(idt[T_NMI], 1, GD_KT, trap_nmi, 0);
+  SETGATE(idt[T_BRKPT], 1, GD_KT, trap_brkpt, 3);
+  SETGATE(idt[T_OFLOW], 1, GD_KT, trap_oflow, 0);
+  SETGATE(idt[T_BOUND], 1, GD_KT, trap_bound, 0);
+  SETGATE(idt[T_ILLOP], 1, GD_KT, trap_illop, 0);
+  SETGATE(idt[T_DEVICE], 1, GD_KT, trap_device, 0);
+  SETGATE(idt[T_DBLFLT], 1, GD_KT, trap_dblflt, 0);
+  SETGATE(idt[T_TSS], 1, GD_KT, trap_tss, 0);
+  SETGATE(idt[T_SEGNP], 1, GD_KT, trap_segnp, 0);
+  SETGATE(idt[T_STACK], 1, GD_KT, trap_stack, 0);
+  SETGATE(idt[T_GPFLT], 1, GD_KT, trap_gpflt, 0);
+  SETGATE(idt[T_PGFLT], 1, GD_KT, trap_pgflt, 0);
+  SETGATE(idt[T_FPERR], 1, GD_KT, trap_fperr, 0);
+  SETGATE(idt[T_ALIGN], 1, GD_KT, trap_align, 0);
+  SETGATE(idt[T_MCHK], 1, GD_KT, trap_mchk, 0);
+  SETGATE(idt[T_SIMDERR], 1, GD_KT, trap_simderr, 0);
+  SETGATE(idt[T_SYSCALL], 1, GD_KT, trap_syscall, 3);
+  */
 
+  extern void idt_setup(void);
+  idt_setup();
 
-  // LAB 3: Your code here.
-
+  extern void *idt_beg;
+  idt = (struct Gatedesc*) &idt_beg;
+  idt_pd.pd_lim = 8*256 - 1;
+  idt_pd.pd_base = (uint32_t)&idt_beg;
+  
   // Per-CPU setup
   trap_init_percpu();
 }
@@ -188,13 +236,39 @@ trap_dispatch(struct Trapframe *tf)
   // interrupt using lapic_eoi() before calling the scheduler!
   // LAB 4: Your code here.
 
-  // Unexpected trap: The user process or the kernel has a bug.
   print_trapframe(tf);
-  if (tf->tf_cs == GD_KT)
-    panic("unhandled trap in kernel");
-  else {
-    env_destroy(curenv);
-    return;
+  switch (tf->tf_trapno) {
+    case T_DEBUG:
+    case T_BRKPT:
+      monitor(tf);
+      break;
+    case T_PGFLT:
+      page_fault_handler(tf);
+      //cprintf("pagefault at %p\n", rcr2());
+      if (tf->tf_cs == GD_KT)
+        panic("pagefault in kernel");
+      else {
+        cprintf("terminating process\n");
+        env_destroy(curenv);
+      }
+      break;
+    case T_SYSCALL:
+      tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax,
+          tf->tf_regs.reg_edx,
+          tf->tf_regs.reg_ecx,
+          tf->tf_regs.reg_ebx,
+          tf->tf_regs.reg_edi,
+          tf->tf_regs.reg_esi);
+      break;
+    default:
+      // Unexpected trap: The user process or the kernel has a bug.
+      print_trapframe(tf);
+      if (tf->tf_cs == GD_KT)
+        panic("unhandled trap in kernel");
+      else {
+        env_destroy(curenv);
+        return;
+      }
   }
 }
 
