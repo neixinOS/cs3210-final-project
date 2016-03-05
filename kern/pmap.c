@@ -289,7 +289,10 @@ mem_init_mp(void)
   //     Permissions: kernel RW, user NONE
   //
   // LAB 4: Your code here:
-
+  uint32_t i;
+  for (i = 0; i < NCPU; ++i) {
+      boot_map_region(kern_pgdir, KSTACKTOP - i * (KSTKSIZE + KSTKGAP) - KSTKSIZE, KSTKSIZE, PADDR(&percpu_kstacks[i]), PTE_W | PTE_P);
+  }
 }
 
 // --------------------------------------------------------------
@@ -334,8 +337,9 @@ page_init(void)
     //  0
     //  IO hole
     //  EXTPHYSMEM until what has been boot_alloced
-    if ((IOPHYSMEM/PGSIZE<=i)&&
-        ((uintptr_t)boot_alloc(0)>(uintptr_t)page2kva(&pages[i])))
+    //  MPENTRY_PADDR
+    if ((MPENTRY_PADDR/PGSIZE == i) || ((IOPHYSMEM/PGSIZE<=i)&&
+        ((uintptr_t)boot_alloc(0)>(uintptr_t)page2kva(&pages[i]))))
       continue;
     pages[i].pp_ref = 0;
     pages[i].pp_link = page_free_list;
@@ -628,8 +632,13 @@ mmio_map_region(physaddr_t pa, size_t size)
   //
   // Hint: The staff solution uses boot_map_region.
   //
-  // Your code here:
-  panic("mmio_map_region not implemented");
+  size = ROUNDUP(size, PGSIZE);
+  if (size > MMIOLIM - MMIOBASE) panic("size overflow");
+  //map [base,base+size) to pa
+  boot_map_region(kern_pgdir, base, size, pa, PTE_PCD|PTE_PWT|PTE_W|PTE_P);
+  uintptr_t old_base = base;
+  base += size;
+  return (void *)old_base;
 }
 
 static uintptr_t user_mem_check_addr;
@@ -754,6 +763,8 @@ check_page_free_list(bool only_low_memory)
 
   assert(nfree_basemem > 0);
   assert(nfree_extmem > 0);
+
+  cprintf("check_page_free_list() succeeded!\n");
 }
 
 //

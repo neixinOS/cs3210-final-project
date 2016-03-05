@@ -669,6 +669,7 @@ env_run(struct Env *e)
   //dump_pgdir();
   //cprintf("word to execute: %16x\n", *(uint64_t*)0x800020);
   //panic("yo");
+  unlock_kernel();
   env_pop_tf(&curenv->env_tf);
 }
 
