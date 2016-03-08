@@ -487,7 +487,7 @@ static void
 boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
 {
   // Fill this function in
-  cprintf("mapping: %p -> %p size %08x\n", va, pa, size);
+  //cprintf("mapping: %p -> %p size %08x\n", va, pa, size);
   size_t i;
   for (i = 0; i < size; i+=PGSIZE) {
     pte_t* pteentry = pgdir_walk(pgdir, (void*)(va+i), true);

@@ -299,7 +299,7 @@ region_alloc(struct Env *e, void *va, size_t len)
   //   (Watch out for corner-cases!)
   uintptr_t rounded_va = ROUNDDOWN((uintptr_t)va, PGSIZE);
   size_t rounded_len = ROUNDUP((uintptr_t)va + len, PGSIZE) - rounded_va;
-  cprintf("rounded_va: %p rounded_len: %08x\n", rounded_va, rounded_len);
+  //cprintf("rounded_va: %p rounded_len: %08x\n", rounded_va, rounded_len);
   size_t i;
   for (i = 0; i < rounded_len; i += PGSIZE) {
     struct PageInfo *pg = page_alloc(0);
@@ -308,7 +308,7 @@ region_alloc(struct Env *e, void *va, size_t len)
     //cprintf("inserting: %p\n", rounded_va + i);
     if (0 > page_insert(e->env_pgdir, pg, (void *)rounded_va + i, PTE_U | PTE_W | PTE_P))
       panic("out of memory");
-    cprintf("allocating 1 page at %p\n", rounded_va + i);
+    //cprintf("allocating 1 page at %p\n", rounded_va + i);
   }
 }
 
@@ -449,8 +449,8 @@ load_icode(struct Env *e, uint8_t *binary)
   if (elfhdr->e_magic != ELF_MAGIC)
     panic("the elf is bad");
   
-  cprintf(">>>>>ELFheader<<<<<:\ne_entry: %08x\ne_phoff: %08x\ne_phnum: %08x\n",
-      elfhdr->e_entry, elfhdr->e_phoff, elfhdr->e_phnum);
+  /*cprintf(">>>>>ELFheader<<<<<:\ne_entry: %08x\ne_phoff: %08x\ne_phnum: %08x\n",
+      elfhdr->e_entry, elfhdr->e_phoff, elfhdr->e_phnum);*/
   // load the elf program
   struct Proghdr *ph, *eph;
   // the first cast is for setting the offset per unit addition
@@ -463,9 +463,9 @@ load_icode(struct Env *e, uint8_t *binary)
         ph->p_flags, ph->p_align);*/
 
     if (ph->p_type != ELF_PROG_LOAD) continue;
-    cprintf("loading header! \n");
+    //cprintf("loading header! \n");
     //allocate the pages and virtual address
-    cprintf("calling region_alloc with: e=%p va=%p size=%08x\n", e, ph->p_va, ph->p_memsz);
+    //cprintf("calling region_alloc with: e=%p va=%p size=%08x\n", e, ph->p_va, ph->p_memsz);
     region_alloc(e, (void *)ph->p_va, ph->p_memsz);
     uint32_t cr3 = rcr3();
     //cprintf("read cr3: %08x\n", cr3);
@@ -488,9 +488,9 @@ load_icode(struct Env *e, uint8_t *binary)
     memset((void *)ph->p_va, 0, ph->p_memsz);
     //copy the code into the pages
     void *pbeg = (void *)(binary + ph->p_offset);
-    cprintf("first word of section: %08x\n", *(uint32_t*)pbeg);
+    //cprintf("first word of section: %08x\n", *(uint32_t*)pbeg);
     memcpy((void *)ph->p_va, pbeg, ph->p_filesz);
-    cprintf("copied word of section: %08x\n", *(uint32_t*)ph->p_va);
+    //cprintf("copied word of section: %08x\n", *(uint32_t*)ph->p_va);
     lcr3((uint32_t)cr3);
   }
   // Now map one page for the program's initial stack
@@ -529,7 +529,7 @@ env_create(uint8_t *binary, enum EnvType type)
     }
   }
   e->env_type = type;
-  cprintf("loading icode\n");
+  //cprintf("loading icode\n");
   load_icode(e, binary);
 }
 
@@ -657,8 +657,8 @@ env_run(struct Env *e)
   //	e->env_tf.  Go back through the code you wrote above
   //	and make sure you have set the relevant parts of
   //	e->env_tf to sensible values.
-  cprintf("running env: %d\n", e->env_id);
-  cprintf("eip in trapframe: %p\n", e->env_tf.tf_eip);
+  //cprintf("running env: %d\n", e->env_id);
+  //cprintf("eip in trapframe: %p\n", e->env_tf.tf_eip);
   if (curenv && curenv->env_status == ENV_RUNNING)
     curenv->env_status = ENV_RUNNABLE;
 
