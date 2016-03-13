@@ -1,0 +1,8 @@
+1. The load address of mpentry.S is not loaded at phys addr 0x0. Thus an offset
+has to be placed in front of any physical memory reference
+
+2. When a trap is triggered during error handling by another core.
+
+3. The address space above KERNBASE is the same for kern_pgdir and env_pgdir
+
+4. They are pushed onto kernel stack upon entry of syscall trap
