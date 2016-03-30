@@ -16,10 +16,11 @@ readline(const char *prompt)
   echoing = 1; //iscons(0);
   while (1) {
     c = getchar();
-    if (c < 0) {
+    //if (c < 0) {
       cprintf("read error: %e\n", c);
       return NULL;
-    } else if ((c == '\b' || c == '\x7f') && i > 0) {
+    //} else 
+    if ((c == '\b' || c == '\x7f') && i > 0) {
       if (echoing)
         cputchar('\b');
       i--;
