@@ -76,6 +76,13 @@ int     sys_ipc_try_send(envid_t to_env, uint32_t value, void *pg, int perm);
 int     sys_ipc_recv(void *rcv_pg);
 unsigned int sys_time_msec(void);
 
+
+// raid
+int sys_raid2_init(void);
+int sys_raid2_add(int num, int* a);
+int sys_raid2_change(int isdisk, int num, int change);
+int sys_raid2_check(void);
+
 // This must be inlined.  Exercise for reader: why?
 static __inline envid_t __attribute__((always_inline))
 sys_exofork(void)
