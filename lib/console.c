@@ -22,11 +22,14 @@ getchar(void)
   // allowing the user to redirect script files to the shell and such.
   // getchar() reads a character from file descriptor 0.
   r = read(0, &c, 1);
-  if (r < 0)
+  /*if (r < 0)
     return r;
   if (r < 1)
     return -E_EOF;
-  return c;
+  return c;*/
+  while ((r = sys_cgetc()) == 0)
+    sys_yield();
+  return r;
 }
 
 
