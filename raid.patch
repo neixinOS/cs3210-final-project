@@ -1,0 +1,515 @@
+From 900bce7293509e4d8a87dc19ae59cb85b7f11d06 Mon Sep 17 00:00:00 2001
+From: caesar <shizhe95@gmail.com>
+Date: Sat, 16 Apr 2016 15:29:45 -0400
+Subject: [PATCH] raid
+
+---
+ inc/lib.h         |   6 ++
+ inc/syscall.h     |   4 +
+ kern/pmap.c       |  21 +++-
+ kern/pmap.h       |  15 +++
+ kern/syscall.c    | 299 ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ lib/syscall.c     |  20 ++++
+ user/faultwrite.c |  26 ++++-
+ 7 files changed, 388 insertions(+), 3 deletions(-)
+
+diff --git a/inc/lib.h b/inc/lib.h
+index cd05ba2..09316a6 100644
+--- a/inc/lib.h
++++ b/inc/lib.h
+@@ -59,6 +59,12 @@ int     sys_page_unmap(envid_t env, void *pg);
+ int     sys_ipc_try_send(envid_t to_env, uint32_t value, void *pg, int perm);
+ int     sys_ipc_recv(void *rcv_pg);
+ 
++// raid
++int sys_raid2_init(void);
++int sys_raid2_add(int num, int* a);
++int sys_raid2_change(int isdisk, int num, int change);
++int sys_raid2_check(void);
++
+ // This must be inlined.  Exercise for reader: why?
+ static __inline envid_t __attribute__((always_inline))
+ sys_exofork(void)
+diff --git a/inc/syscall.h b/inc/syscall.h
+index 6eb4164..2587702 100644
+--- a/inc/syscall.h
++++ b/inc/syscall.h
+@@ -18,6 +18,10 @@ enum {
+   SYS_ipc_try_send,
+   SYS_ipc_recv,
+   SYS_change_priority,
++  SYS_raid2_init,
++  SYS_raid2_add,
++  SYS_raid2_change,
++  SYS_raid2_check,
+   NSYSCALLS
+ };
+ 
+diff --git a/kern/pmap.c b/kern/pmap.c
+index 6167f78..be4be5f 100644
+--- a/kern/pmap.c
++++ b/kern/pmap.c
+@@ -20,6 +20,16 @@ pde_t *kern_pgdir;                      // Kernel's initial page directory
+ struct PageInfo *pages;                 // Physical page state array
+ static struct PageInfo *page_free_list; // Free list of physical pages
+ 
++// for raid
++int nraid2_disks = 100;
++struct My_Disk* raid2_disks;
++// struct My_Disk* origin_raid2_disk[7];
++// struct My_Disk* user_raid2_disk[7];
++// int now_raid2_add;
++// int now_raid2_disk;
++// int nn_add[7] = {0, 0, 4, 0, 5, 6, 2}; 
++#define URAID 0x700000
++
+ 
+ // --------------------------------------------------------------
+ // Detect machine's physical memory setup.
+@@ -166,6 +176,9 @@ mem_init(void)
+   // LAB 3: Your code here.
+   envs = (struct Env*) boot_alloc(sizeof(struct Env) * NENV);
+ 
++  // allocate for raid disk
++  raid2_disks = (struct My_Disk*) boot_alloc(nraid2_disks * sizeof(struct My_Disk));
++
+   //////////////////////////////////////////////////////////////////////
+   // Now that we've allocated the initial kernel data structures, we set
+   // up the list of free physical pages. Once we've done so, all further
+@@ -202,6 +215,10 @@ mem_init(void)
+   // LAB 3: Your code here.
+   boot_map_region(kern_pgdir, UENVS, ROUNDUP(NENV * sizeof(struct Env), PGSIZE), PADDR(envs), PTE_U | PTE_P);
+ 
++
++  //allocate space for raid
++  boot_map_region(kern_pgdir, URAID, ROUNDUP(nraid2_disks * sizeof(struct My_Disk), PGSIZE), PADDR(raid2_disks), PTE_U | PTE_P);
++
+   //////////////////////////////////////////////////////////////////////
+   // Use the physical memory that 'bootstack' refers to as the kernel
+   // stack.  The kernel stack grows down from virtual address KSTACKTOP.
+@@ -875,8 +892,8 @@ check_kern_pgdir(void)
+       if (i >= PDX(KERNBASE)) {
+         assert(pgdir[i] & PTE_P);
+         assert(pgdir[i] & PTE_W);
+-      } else
+-        assert(pgdir[i] == 0);
++      } /*else
++        assert(pgdir[i] == 0);*/
+       break;
+     }
+   }
+diff --git a/kern/pmap.h b/kern/pmap.h
+index 428087e..b1dd044 100644
+--- a/kern/pmap.h
++++ b/kern/pmap.h
+@@ -91,3 +91,18 @@ page2kva(struct PageInfo *pp)
+ pte_t *pgdir_walk(pde_t *pgdir, const void *va, int create);
+ 
+ #endif /* !JOS_KERN_PMAP_H */
++
++// raid
++struct My_Disk {
++	bool dirty;
++	struct My_Disk* next;
++	int now;
++	int data;
++};
++int nraid2_disks;
++struct My_Disk* raid2_disks;
++struct My_Disk* origin_raid2_disk[7];
++struct My_Disk* user_raid2_disk[7];
++int now_raid2_add;
++int now_raid2_disk;
++// int nn_add[7]; 
+\ No newline at end of file
+diff --git a/kern/syscall.c b/kern/syscall.c
+index 0da004e..1e5b089 100644
+--- a/kern/syscall.c
++++ b/kern/syscall.c
+@@ -12,6 +12,8 @@
+ #include <kern/console.h>
+ #include <kern/sched.h>
+ 
++#define DTEMP 0x80000000 
++
+ // Print a string to the system console.
+ // The string is exactly 'len' characters long.
+ // Destroys the environment on memory errors.
+@@ -399,6 +401,291 @@ static void sys_change_priority(envid_t envid, int p) {
+   return;
+ }
+ 
++
++static void printState() {
++  struct My_Disk* cur_disk;
++  int i;
++  for (i = 0; i < 4; i++) {
++    // user_raid2_disk[i]->next = &raid2_disks[i];
++    // user_raid2_disk[i] = &raid2_disks[now_raid2_disk];
++    // user_raid2_disk[i]->next = NULL;
++    // user_raid2_disk[i]->data = 0;
++    // user_raid2_disk[i]->now = 0;
++    // user_raid2_disk[i]->dirty = false;
++    cur_disk = &raid2_disks[i];
++    while (cur_disk != NULL) {
++      cprintf("%d", cur_disk->data);
++      cur_disk = cur_disk->next;
++    }
++  }
++}
++
++static void disk_alloc() {
++  int i;
++  for (i = 0; i < 4; i++, now_raid2_disk++) {
++    user_raid2_disk[i]->next = &raid2_disks[now_raid2_disk];
++    user_raid2_disk[i] = &raid2_disks[now_raid2_disk];
++    user_raid2_disk[i]->next = NULL;
++    user_raid2_disk[i]->data = 0;
++    user_raid2_disk[i]->now = 0;
++    user_raid2_disk[i]->dirty = false;
++  }
++  cprintf("~~~~~~~~~~~~~~~~~~%d~~~~~~~~~~~~~~~~~~~~ Disk alloc\n", now_raid2_disk);
++  return;
++}
++
++static void Xor() {
++  cprintf("disk 0 %d\n", user_raid2_disk[0]->data);
++  cprintf("disk 1 %d\n", user_raid2_disk[1]->data);
++  cprintf("disk 2 %d\n", user_raid2_disk[2]->data);
++  user_raid2_disk[3]->data = user_raid2_disk[0]->data ^ user_raid2_disk[1]->data ^ user_raid2_disk[2]->data;
++
++  cprintf("   The xor value is %d\n", user_raid2_disk[3]->data);
++  cprintf("\n");
++
++  disk_alloc();
++}
++
++static void sys_raid2_init() {
++  // cprintf("From %d to initialization!\n", now_raid2_disk);
++  int i;
++  for (i = 0; i < 4; i++, now_raid2_disk++) {
++    user_raid2_disk[i] = &raid2_disks[now_raid2_disk];
++    origin_raid2_disk[i] = &raid2_disks[now_raid2_disk];
++    user_raid2_disk[i]->next = NULL;
++    user_raid2_disk[i]->data = 0;
++    user_raid2_disk[i]->now = 0;
++    user_raid2_disk[i]->dirty = false;
++  }
++  cprintf("~~~~~~~~~~~~~~~~~~%d~~~~~~~~~~~~~~~~~~~~ Disk alloc\n", now_raid2_disk);
++  now_raid2_add = 0;
++  return;
++}
++
++static void sys_raid2_add(int num, uint32_t* a) {
++
++
++  int i, count;
++  count = num;
++  for (i = 0; i < num; i++) {
++    // cprintf("Add %d to disk\n", a[i]);
++    int tmp = a[i];
++    cprintf("\tAdd %d to disk %d\n", tmp, now_raid2_add);
++    if (tmp)
++    {
++      user_raid2_disk[now_raid2_add]->data = tmp;
++    } else {
++      user_raid2_disk[now_raid2_add]->data = 0;
++    }
++    now_raid2_add++;
++    count--;
++    if (count == 0) {
++      // if (now_raid2_add != 3)
++      // {
++      // }
++      cprintf("Allocate for the last disk\n");
++      Xor();
++      break;
++    }
++    if (now_raid2_add == 3) {
++      now_raid2_add = 0;
++      cprintf("Write to parity disk\n");
++      Xor();
++    }
++  }
++
++  // cprintf("Last few data");
++  // for (i = 0; i < 4; i++)
++  //   cprintf("%x\n", user_raid2_disk[i]->data);
++  // cprintf("\n");
++  // cprintf("print state now\n");
++  // struct My_Disk* cur_disk;
++  // for (i = 0; i < 4; i++) {
++  //   // user_raid2_disk[i]->next = &raid2_disks[i];
++  //   // user_raid2_disk[i] = &raid2_disks[now_raid2_disk];
++  //   // user_raid2_disk[i]->next = NULL;
++  //   // user_raid2_disk[i]->data = 0;
++  //   // user_raid2_disk[i]->now = 0;
++  //   // user_raid2_disk[i]->dirty = false;
++  //   cur_disk = &raid2_disks[i];
++  //   cprintf("Content for disk %d\n", i);
++  //   while (cur_disk != NULL) {
++  //     cprintf("%d ", cur_disk->data);
++  //     // cprintf("%d\n", cur_disk->dirty);
++  //     cur_disk = cur_disk->next;
++  //   }
++  // }
++
++
++}
++
++static void sys_raid2_change(int onDisk, int num, int change) {
++  int count = 0;
++  struct My_Disk* cur_disk;
++
++  // cprintf("\n");
++  // cprintf("Before the change\n");
++
++  // while (raid2_disks[count].next != NULL) {
++  //   cur_disk = &raid2_disks[count];
++  //   cprintf("Sector %d\n", count);
++  //   cprintf("%d        ", cur_disk->data);
++  //   cprintf("%d\n", cur_disk->dirty);
++  //   count++;
++  // }
++
++  raid2_disks[num].dirty = true;
++  raid2_disks[num].data = change;
++  
++
++  // cprintf("\n");
++  // cprintf("After the change\n");
++  // count = 0;
++  // while (raid2_disks[count].next != NULL) {
++  //   cur_disk = &raid2_disks[count];
++  //   cprintf("Sector %d\n", count);
++  //   cprintf("%d \t", cur_disk->data);
++  //   cprintf("%d\n", cur_disk->dirty);
++  //   count++;
++  // }
++
++  return;
++
++  // if (is_disk) {
++  //   // num is the exact place in the physical memory
++  //   // ie, need to be 0, 1, 2, (no 3), 4, 5, 6, (no 7)
++  //   raid2_disks[num].dirty = true;
++  //   raid2_disks[num].data = change;
++  //   return;
++  // }
++
++  // //is_disk表明我是不是整块硬盘进行修改，而change为我进行修改的值，
++  // //num在修改硬盘情况下，表示我修改的是第几块硬盘，否则表示我修改是数据第多少位。
++  // struct My_Disk* tmp_disk[4];
++
++  // int i;
++  // for (i = 0; i < 4; i++) 
++  //   tmp_disk[i] = origin_raid2_disk[i];
++  // for (;num > 32 * 4;) {
++  //   num -= 32 * 4;
++  //   for (i = 0; i < 4; i++)
++  //     tmp_disk[i] = tmp_disk[i]->next;
++  // }
++  // int row = num / 3;
++  // int col = num % 3;
++  // // if (col >= 1) col += 3; else col += 2;
++  // tmp_disk[col]->data &= ~(1 << row);
++  // tmp_disk[col]->data |= change;
++  // return;
++}
++
++
++struct My_Disk* tmp_disk[4];
++
++static void sys_raid2_check() {
++  cprintf("\n");
++  cprintf("Check for RAID Disk integrity\n");
++  int sum_d = 0;
++  int i;
++  int j;
++  for (i = 0; i < 4; i++) {
++    tmp_disk[i] = origin_raid2_disk[i];
++    if (tmp_disk[i]->dirty) sum_d++;
++  }
++  int now_num = 0;
++  int damagedDisk = 0;
++  for (;tmp_disk[0] != NULL;) {
++    cprintf("---------Check is going on---------------------Sector %d %d\n", now_num, sum_d);
++    // uint32_t a1 = (tmp_disk[2]->data ^ tmp_disk[4]->data ^ tmp_disk[6]->data ^ tmp_disk[0]->data);
++    // uint32_t a2 = (tmp_disk[2]->data ^ tmp_disk[5]->data ^ tmp_disk[6]->data ^ tmp_disk[1]->data);
++    // uint32_t a3 = (tmp_disk[5]->data ^ tmp_disk[4]->data ^ tmp_disk[6]->data ^ tmp_disk[3]->data);
++    cprintf("start!\n");
++    for (i = 0; i < 4; i++) {
++      if (i == 3) cprintf("Parity value is: ");
++      cprintf("%d ", tmp_disk[i]->data);
++    }
++    cprintf("\n");
++    cprintf("end!\n");
++//    cout << a1 << endl;
++  //  cprintf("%x  %x  %x\n", a1, a2, a3);
++//    cout << a2 << endl;
++//    cout
++    // int l = 0;
++    // int t = 0;
++    // for (i = 0; i < tmp_disk[2]->now; i++) {
++    //   int b1 = 0, b2 = 0, b3 = 0;
++    //   if ((a1) & (1 << i)) {
++    //     b1 = 1;
++    //   }
++    //   if ((a2) & (1 << i)) {
++    //     b2 = 2;
++    //   }
++    //   if ((a3) & (1 << i)) {
++    //     b3 = 4;
++    //   }
++    //   int st = b1 + b2 + b3 - 1;
++    //   if (st< 0) continue;
++    //   cprintf("%d\n", st);
++    if (sum_d > 1) {
++      cprintf("Sector %d cannot repair\n", now_num);
++    } else if (sum_d == 1) {
++      cprintf("Sector %d repair\n", now_num);
++      cprintf("Wrong value is %d\n", tmp_disk[damagedDisk]->data);
++      int rightValue = 0;
++      for (j = 0; j < 4; ++j)
++      {
++        if (j != damagedDisk)
++        {
++          rightValue ^= tmp_disk[j]->data;
++        }
++      }
++      tmp_disk[damagedDisk]->data = rightValue;
++      cprintf("After fixing, the value is: ", rightValue);
++      // tmp_disk[st]->data ;
++      for (i = 0; i < 3; i++) {
++        // if (i == 3) cprintf("Parity value is: ");
++        cprintf("%d ", tmp_disk[i]->data);
++      }
++      cprintf("\n");
++    }
++    // }
++    // cprintf("data\n");
++    // for (i = 0; i < tmp_disk[2]->now; i++) {  
++    //   t |= (!!(tmp_disk[2]->data & (1 << i))) <<  l;
++    //   l++;
++    //   t |= (!!(tmp_disk[4]->data & (1 << i))) <<  l;
++    //   l++;
++    //   t |= (!!(tmp_disk[5]->data & (1 << i))) <<  l;
++    //   l++;
++    //   t |= (!!(tmp_disk[6]->data & (1 << i))) <<  l;
++    //   l++;
++    //   if (l == 32) {
++    //     cprintf("%d ", t);
++    //     l = 0;
++    //     t = 0;
++    //   }
++    // }
++    // if (l != 0) {
++    //   cprintf("%d", t);
++    // }
++    // cprintf("\n");
++    
++//    check_raid2_disk();
++    sum_d = 0;
++    for (i = 0; i < 4; i++) {
++      if (tmp_disk[i]->next == NULL) return;
++      tmp_disk[i] = tmp_disk[i]->next;
++      if (tmp_disk[i]->dirty) {
++        sum_d++;
++        damagedDisk = i;
++      }
++    }
++    now_num++;
++  }
++  return;
++
++}
++
+ // Dispatches to the correct kernel function, passing the arguments.
+ int32_t
+ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
+@@ -452,6 +739,18 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4,
+       goto succeed;
+     case SYS_env_set_trapframe:
+       return sys_env_set_trapframe((envid_t) a1, (struct Trapframe *) a2);
++    case SYS_raid2_init :
++      sys_raid2_init();
++      goto succeed;
++    case SYS_raid2_add :
++      sys_raid2_add(a1, (uint32_t*) a2);
++      goto succeed;
++    case SYS_raid2_change :
++      sys_raid2_change(a1, a2, a3);
++      goto succeed;
++    case SYS_raid2_check :
++      sys_raid2_check();
++      goto succeed;
+     default :
+       return -E_INVAL;
+   }
+diff --git a/lib/syscall.c b/lib/syscall.c
+index 0ce8a82..c395f70 100644
+--- a/lib/syscall.c
++++ b/lib/syscall.c
+@@ -122,3 +122,23 @@ sys_change_priority(envid_t envid, int p)
+ {
+   syscall(SYS_change_priority, 0, (envid_t) envid, (int) p, 0, 0, 0);
+ }
++
++
++// raid
++int 
++sys_raid2_init(void) 
++{
++  return syscall(SYS_raid2_init, 0, 0, 0, 0, 0, 0);
++}
++int sys_raid2_add(int num, int* a) 
++{
++  return syscall(SYS_raid2_add, 0, num, (uint32_t) a, 0, 0, 0);
++}
++int sys_raid2_change(int isdisk, int num, int change) 
++{
++  return syscall(SYS_raid2_change, 0, isdisk, num, change, 0, 0);
++}
++int sys_raid2_check(void) 
++{
++  return syscall(SYS_raid2_check, 0, 0, 0, 0, 0, 0);
++}
+diff --git a/user/faultwrite.c b/user/faultwrite.c
+index a7f9397..bfa3562 100644
+--- a/user/faultwrite.c
++++ b/user/faultwrite.c
+@@ -5,6 +5,30 @@
+ void
+ umain(int argc, char **argv)
+ {
+-  *(unsigned*)0 = 0;
++	int a[100];
++	cprintf("\n");
++	cprintf("********************************\n");
++	cprintf("Start Initialize the RAID Disk\n");
++	cprintf("\n");
++	sys_raid2_init();
++	int i;
++	for (i = 0; i < 100; i++) 
++		a[i] = i;
++	cprintf("Saving contents on RAID Disk\n");
++	cprintf("\n");
++	sys_raid2_add(20, a);
++	// sys_raid2_change(1, 1, 4);
++	// sys_raid2_change(0, 0, 1);
++	
++	// sys_raid2_change(1, 24, 4);
++	sys_raid2_change(1, 25, 99999);
++	sys_raid2_check();
++	return;
+ }
++/*void
++umain(int argc, char **argv)
++{
++	*(unsigned*)0 = 0;
++}
++*/
+ 
+-- 
+1.9.1
+
