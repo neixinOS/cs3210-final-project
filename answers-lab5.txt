@@ -1,0 +1,281 @@
+Q1. Do you have to do anything else to ensure that this I/O privilege setting is saved and restored properly when you subsequently switch from one environment to another? Why?
+No, we don’t have to do anything else, since this I/O privilege setting is saved by hardware and restored by iret in env_pop_tf.
+
+Challenge! Implement mmap-style memory-mapped files and modify spawn to map pages directly from the ELF image when possible.
+
+1. in inc/lib.h, declares the prototypes will be used in mmap.c
+// challenge for lab5
+// mmap.c
+void *mmap(void *start, size_t length, int prot, int mode, int fd, off_t offset);
+int munmap(void *start, size_t length);
+
+
+2. creates lib/mmap.c to implement mmap-style memory-mapped files. In this mmap.c,we have mmap and munmap to map and ummap. it defines  protections and flags containing sharing type and options and then updates the corresponding permissions, checks the permission before mapping, seek and read helps mmap.
+
+#include <inc/lib.h>
+#include <fs/fs.h>
+
+
+#define MAP_FAILED  ((void *)-1)    // failed
+#define PROT_EXEC 0x0001        // pages can be executed 
+#define PROT_READ 0x0002        // pages can be read 
+#define PROT_WRITE 0x0004       // pages can be written
+#define PROT_NONE 0x0008        // no permissions 
+#define MAP_FIXED 0x0001        // interpret addr exactly 
+#define MAP_SHARED 0x0002       // share changes 
+#define MAP_PRIVATE 0x0004      // changes are private 
+#define MAP_ANONYMOUS 0x0100    
+#define MAP_ANON 0x0200      
+#define PTE_SHARED 0x400
+
+void *mmapped[32];
+int modes[32];
+int fds[32];
+off_t offsets[32];
+int mmap_cnt = 0;
+
+
+void *
+mmap(void *start, size_t length, int prot, int mode, int fd, off_t offset)
+{
+  void * ret;
+  int r, i, perm = PTE_P;
+
+  if (prot & PROT_WRITE) {
+    perm |= PTE_W;
+  }
+  if (prot & PROT_READ) {
+    perm |= PTE_U;
+  }
+  if (mode & MAP_SHARED) {
+    perm |= PTE_SHARED;
+  }
+  if (prot & PROT_NONE) {
+    perm = PTE_P;
+  }
+
+  if ((mode & MAP_ANONYMOUS) && (fd != -1)) {
+    return MAP_FAILED;
+  }
+
+  if (!(mode & MAP_ANONYMOUS)) {
+    struct Fd * fd_store;
+    if ((r = fd_lookup(fd, &fd_store)) < 0) {
+      panic("mmap(): fd_lookup: %e", r); 
+    }  
+    if ((prot & PROT_READ) && fd_store->fd_omode != O_RDONLY 
+      && fd_store->fd_omode != O_RDWR) {
+      return MAP_FAILED;
+    }
+    if ((prot & PROT_WRITE) && fd_store->fd_omode != O_WRONLY 
+      && fd_store->fd_omode != O_RDWR) {
+      return MAP_FAILED;
+    }
+  }
+
+  if (start) {
+    ret = start;
+  } else {
+    uintptr_t st = UTEXT;
+    int cnt = 0;
+    for (; st < USTACKTOP-PGSIZE; st++) {
+      if (pageref((void *)st)) {
+        cnt = 0;
+      } else {
+        cnt++;
+      }
+      if (cnt * PGSIZE >= length) {
+        break;
+      }
+    }
+    if (st == USTACKTOP-PGSIZE) {
+      return MAP_FAILED;
+    }
+    ret = (void *)(st - (cnt - 1) * PGSIZE);
+  }
+  
+  if (!(mode & MAP_ANONYMOUS)) {
+    seek(fd, offset);
+    uintptr_t st = (uintptr_t)ret;
+    for (i = 0; i < ROUNDUP(length, PGSIZE)/PGSIZE; i++) {
+      if (!pageref((void *)st)) {
+        if ((r = sys_page_alloc(0, (void *)st, perm)) < 0) {
+          panic("mmap(): sys_page_alloc: %e", r);
+        }
+      }
+      if ((r = read(fd, (void *)st, MIN(PGSIZE, length))) < 0) {
+        panic("mmap(): read: %e", r);
+      }
+      st += PGSIZE;
+      length -= PGSIZE;
+    }
+  }
+
+  mmapped[mmap_cnt] = ret;
+  modes[mmap_cnt] = mode;
+  fds[mmap_cnt] = fd;
+  offsets[mmap_cnt++] = offset;
+
+  return ret;
+}
+
+int
+munmap(void * start, size_t length)
+{
+  int r, i;
+  for (i = 0; i < mmap_cnt; i++) {
+    if (mmapped[i] == start) {
+      break;
+    }
+  }
+  if (!(modes[i] & MAP_ANONYMOUS) && !(modes[i] & MAP_PRIVATE)) {
+    seek(fds[i], offsets[i]);
+    uintptr_t st = (uintptr_t)start;
+    for (i = 0; i < (ROUNDUP(length, PGSIZE) / PGSIZE); i++) {
+      if ((r = write(fds[i], (void *)st, MIN(length, PGSIZE))) < 0) {
+        panic("munmap(): write: %e", r);
+      }
+      st += PGSIZE;
+      length -= PGSIZE;
+    }
+  }
+
+  for (; i < mmap_cnt - 1; i++) {
+    mmapped[i] = mmapped[i + 1];
+    modes[i] = modes[i + 1];
+    fds[i] = fds[i + 1];
+    offsets[i] = offsets[i + 1];
+  }
+  mmap_cnt--;
+
+  return 0;
+}
+
+
+adds lib.mmap.c in LIB_SRCFILES in lib/Makefrag to compile new file
+
+
+3. in lib/spawn.c, for spawn(), uses mmap to read elf header, comments out original lines.
+  …
+  elf = (struct Elf*) mmap(elf_buf, sizeof(elf_buf), PROT_READ, MAP_SHARED, fd, 0);
+  if (elf->e_magic != ELF_MAGIC) {
+    close(fd);
+    cprintf("elf magic %08x want %08x\n", elf->e_magic, ELF_MAGIC);
+    return -E_NOT_EXEC;
+  }
+  // Read elf header
+  /*elf = (struct Elf*)elf_buf;
+  if (readn(fd, elf_buf, sizeof(elf_buf)) != sizeof(elf_buf)
+      || elf->e_magic != ELF_MAGIC) {
+    close(fd);
+    cprintf("elf magic %08x want %08x\n", elf->e_magic, ELF_MAGIC);
+    return -E_NOT_EXEC;
+  }*/
+  …
+
+for map_segment(), also uses mmap, comments out original lines.
+  …
+  if ((mmap(UTEMP, MIN(PGSIZE, filesz-i), PROT_READ, MAP_SHARED, fd, fileoffset + i)) < 0)
+    panic("map_segment(): mmap: %e", E_INVAL);
+  /*if ((r = seek(fd, fileoffset + i)) < 0)
+    return r;
+  if ((r = readn(fd, UTEMP, MIN(PGSIZE, filesz-i))) < 0)
+    return r;*/
+  …
+
+4. create a user program usermmap.c to test mmap, in which print statements explains what the operations do
+user/usermmap.c:
+
+#include <inc/lib.h>
+
+#define PROT_READ 0x0002       
+#define PROT_WRITE 0x0004 
+#define MAP_SHARED 0x0002 
+
+void
+umain(int argc, char **argv)
+{
+  int fd, n, r;
+  char *s;
+  char rdbuf[512+1];
+  char wrbuf[512+1] = "CHALLENGE! memory-mapped file!\n";
+
+  cprintf("mmap: open \n");
+  if ((fd = open("/mmapfile", O_RDWR|O_CREAT)) < 0)
+    panic("mmap: open /mmapfile: %e", fd);
+
+  cprintf("mmap: read\n");
+  if ((r = read(fd, rdbuf, sizeof(rdbuf))) < 0)
+    panic("mmap: read /mmapfile: %e", fd);
+
+  cprintf("before mmap()\n----\n%s----\n", rdbuf);
+
+  cprintf("[%08x] mmap: mmap \n", sys_getenvid());
+  if ((s = (char *)mmap(NULL, sizeof(wrbuf), PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0)) < 0)
+    panic("mmap: mmap /mmapfile: %e", -E_INVAL);
+
+  cprintf("memory-mmapped after mmap()\n===\n%s===\n", s);
+  
+  cprintf("[%08x] mmap: strcpy(mmap'return_address, write_buffer)\n", sys_getenvid(), wrbuf); 
+  strcpy(s, wrbuf);
+  
+  cprintf("memory-mmapped after srtcpy()\n===\n%s===\n", s);
+
+  cprintf("mmap: munmap \n");
+  if ((r = munmap(s, sizeof(wrbuf))) < 0)
+    panic("mmap: munmap /mmapfile: %e", -E_INVAL);
+
+  cprintf("mmap: close \n");
+  if ((r = close(fd)) < 0)
+    panic("mmap: close /mmapfile: %e", r);
+
+  cprintf("mmap: open\n");
+  if ((fd = open("/mmapfile", O_RDONLY)) < 0)
+    panic("mmap: open /mmapfile: %e", fd);
+
+  cprintf("mmap: read\n");
+  if ((r = read(fd, rdbuf, sizeof(rdbuf))) < 0)
+    panic("mmap: read /mmapfile: %e", fd);
+
+  cprintf("after mmap()\n----\n%s----\n", rdbuf);
+
+  cprintf("mmap: close \n");
+  if ((r = close(fd)) < 0)
+    panic("mmap: close /mmapfile: %e", r);
+}
+
+adds the binary files for it in kern/Makefrag
+# Binary files for LAB5 challenge
+KERN_BINFILES +=	user/usermmap
+
+5. test results:
+$make run-usermmap-nox
+…
+mmap: open 
+…
+mmap: read
+before mmap()
+before mmap()
+----
+----
+[00001001] mmap: mmap 
+memory-mmapped after mmap()
+===
+===
+[00001001] mmap: strcpy(mmap'return_address, write_buffer)
+memory-mmapped after srtcpy()
+===
+CHALLENGE! memory-mapped file!
+===
+mmap: munmap 
+mmap: close 
+mmap: open
+mmap: read
+after mmap()
+----
+CHALLENGE! memory-mapped file!
+----
+mmap: close 
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+…

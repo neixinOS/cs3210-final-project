@@ -1,0 +1,584 @@
+Q1.
+#define MPBOOTPHYS(s) ((s) - mpentry_start + MPENTRY_PADDR))))
+MPBOOTPHYS is to calculate symobl address relative to MPENTRY_PADDR. The ASM is executed in the load address above KERNBASE, but JOS need to run mp_main at 0x7000 address (whose page is reserved at pmap.c).
+
+Q2.
+When an interupt occurs, it pushes tf_err, tf_eip, tf_cs, tf_padding3, tf_eflags to the stack before checking the lock, so it may mess up with single kernel stack. If it leaves future-needed data in the single kernel stack, it will have the re-entrant problem.
+
+Q3.
+The pointer e be dereferenced both before and after the addressing switch since the kernel virtual memory of all environments are identical.
+
+Q4.
+Because cpu will restore later, and curenv->env_tf saves the current trap frame in trap.c.
+
+Challenge:
+Challenge! Extend your kernel so that not only page faults, but all types of processor exceptions that code running in user space can generate, can be redirected to a user-mode exception handler. Write user-mode test programs to test user-mode handling of various exceptions such as divide-by-zero, general protection fault, and illegal opcode.
+
+The ways to handle different user-mode exceptions are similar, so i will specify the way to handle divide-by-zero, and the ways to handle general protection falut and illegal opcode are similar.
+
+1. Adds void *env_divide0_upcall (divide-by-zero entry point) in struct Env in inc/env.h for exception handling. 
+  struct Env {
+    ...
+    void *env_divide0_upcall;
+    ...
+  }
+
+2. Creats divide0.c in lib to set the divide-by-zero handler function, set_divide0_handler. I allocated one page of memory with its top at UXSTACKTOP, and call _divide0_upcall (defined later) routine when divide-by-zero occurs.
+  ...
+  if (_divide0_handler == 0) {
+        envid_t envid = sys_getenvid();
+        int r = sys_page_alloc(envid, (void *)(UXSTACKTOP-PGSIZE), PTE_P|PTE_U|PTE_W);
+        if (r < 0) panic("divide by zero handler: %e", r);
+        sys_env_set_divide0_upcall(envid, _divide0_upcall);
+    }
+
+    _divide0_handler = handler;
+  }
+  ...
+
+3. In inc/lib.h, declares the set_divide0_handler, and adds sys_env_set_divide0_upcall(envid_t env, void *upcall).
+  ...
+  void  set_divide0_handler(void (*handler)(struct UTrapframe *utf));
+  ...
+  int sys_env_set_divide0_upcall(envid_t env, void *upcall);
+  ...
+
+4. In inc/syscall.h, adds SYS_env_set_divide0_upcall insystem call numbers.
+enum {
+  ...
+  SYS_env_set_divide0_upcall,
+  ...
+};
+
+5. In kern/env.c, clears the divide-by-zero handler in env_alloc() until user installs one.
+  int
+  env_alloc(struct Env **newenv_store, envid_t parent_id)
+  {
+    ...
+    e->env_divide0_upcall = 0;
+    ...
+  }
+
+6. In kern/syscall.c, implements sys_env_set_divide0_upcall, which is similar to sys_env_set_pgfault_upcall. Sets the divide-by-zero upcall by modifying the env_divide0_upcall field in struct Env, and pushes a fault record onto the exception stack once it causes a divide-by-zero. Returns 0 on success, and < 0 on error. Adds SYS_env_set_divide0_upcall in syscall to call the function once the syscallno is SYS_env_set_divide0_upcall.
+  ...
+  static int
+  sys_env_set_divide0_upcall(envid_t envid, void *func)
+  {
+
+    struct Env * env;
+    int r = envid2env(envid, &env, 1);
+    if (r < 0) return r;
+
+    env->env_divide0_upcall = func; 
+
+    return 0;
+  }
+  ...
+  int32_t
+  syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
+  {
+    switch (syscallno) {
+      ...
+      case SYS_env_set_divide0_upcall:
+        return sys_env_set_divide0_upcall(((envid_t)a1), ((void *)a2));
+      ...
+    }
+  }
+
+7. Declares divide_by_zero_handler in kern/trap.h
+  ...
+  void divide_by_zero_handler(struct Trapframe *);
+  ...
+
+8. In kern/trap.c, implements divide_by_zero_handler similar to page_fault_handler. Calls the env's divide-by-zero upcall, if one exists. Sets up a divide-by-zero stack frame on the user exception stack below UXSTACKTOP, then branch to curenv->env_divide0_upcall. If there's no divide-by-zero-upcall, the env didn't allocate a page for its exception stack or can't write to it, or the exception stack overflows, then destroy the environment that caused the fault.
+
+void
+divide_by_zero_handler(struct Trapframe * tf)
+{
+
+  uint32_t fault_va;
+  fault_va = rcr2();
+
+  if ((tf->tf_cs & 3) == 0) {
+    panic("a divde by zero fault happens in user mode");
+  }
+  if (curenv->env_divide0_upcall) {
+    struct UTrapframe *utf;
+    uintptr_t addr;
+    if ((tf->tf_esp >= (UXSTACKTOP - PGSIZE)) && (tf->tf_esp < UXSTACKTOP)) {
+      addr = tf->tf_esp - sizeof(struct UTrapframe) - 4;
+    } else {
+      addr = UXSTACKTOP - sizeof(struct UTrapframe);
+    }
+    user_mem_assert(curenv, (void *)addr, sizeof(struct UTrapframe), (PTE_U|PTE_W));
+    
+    utf = (struct UTrapframe *)addr;
+    utf->utf_eip = tf->tf_eip;
+    utf->utf_esp = tf->tf_esp;
+    utf->utf_regs = tf->tf_regs;
+    utf->utf_eflags = tf->tf_eflags;
+    utf->utf_fault_va = fault_va;
+    utf->utf_err = tf->tf_err;
+
+    curenv->env_tf.tf_eip = (uintptr_t)curenv->env_divide0_upcall;
+    curenv->env_tf.tf_esp = addr;
+    env_run(curenv);
+  }
+
+  cprintf("[%08x] user divide by zero va %08x ip %08x\n",
+    curenv->env_id, fault_va, tf->tf_eip);
+  print_trapframe(tf);
+  env_destroy(curenv);
+
+}
+
+9. Adds dzentry.S in lib which is similar to pfentry.S
+  .text
+  .globl _divide0_upcall
+  _divide0_upcall:
+
+    pushl %esp    
+    movl _divide0_handler, %eax
+    call *%eax
+    addl $4, %esp 
+    
+    movl 0x28(%esp), %eax
+    addl $2, %eax
+    subl $4, 0x30(%esp)
+    movl 0x30(%esp), %ebx
+    movl %eax, (%ebx)
+
+    addl $8, %esp
+    popal
+
+    addl $4, %esp
+    popfl
+
+    popl %esp
+
+    ret
+
+10. Adds sys_env_set_divide0_upcall(envid_t envid, void *upcall) in lib/syscall.c to call the generic system call by passing syscall number and other parameters.
+  int
+  sys_env_set_divide0_upcall(envid_t envid, void *upcall)
+  {
+    return syscall(SYS_env_set_divide0_upcall, 1, envid, (uint32_t) upcall, 0, 0, 0);
+  }
+
+11. Adds divide0.c and dzentry.S in LIB_SRCFILES in lib/Makefrag to compile the new files.
+  #include <inc/lib.h>
+
+  void
+  handler(struct UTrapframe *utf)
+  {
+    cprintf("Challenge!! Divide by zero handler in user mode! The wrong answer generated is: ");
+  }
+
+  void
+  umain(int argc, char **argv)
+  {
+    set_divide0_handler(handler);
+
+    int x, y;
+    x = 3;
+    y = 0;
+    cprintf("%d\n", x/y);
+    cprintf("Running...\n");
+  }
+
+12. Adds a new user program called userdivide0.c in user, in which calls set_divide0_handler to test if the handler works. 
+
+13. Add user/userdivide0.c in KERN_BINFILES in kern/Makefrag to compile and the n test.
+
+
+General protection fault and illegal opcode are handled in similar ways. 
+
+Example Results:
+illegal opcode: 
+  asm volatile("addpd %xmm2, %xmm1");
+in user/userillegalop.c
+
+Before:
+$ make run-userillegalop-nox
+...
+SMP: CPU 0 found 1 CPU(s)
+enabled interrupts: 1 2
+[00000000] new env 00001000
+[00001000] user illegal opcode va 00000000 ip 0080004d
+TRAP frame at 0xf02b5000 from CPU 0
+  edi  0x00000000
+  esi  0x00000000
+  ebp  0xeebfdfd0
+  oesp 0xefffffdc
+  ebx  0x00000000
+  edx  0x00000000
+  ecx  0x00000000
+  eax  0xeec00000
+  es   0x----0023
+  ds   0x----0023
+  trap 0x00000006 Invalid Opcode
+  err  0x00000000
+  eip  0x0080004d
+  cs   0x----001b
+  flag 0x00000296
+  esp  0xeebfdfb8
+  ss   0x----0023
+[00001000] free env 00001000
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+... 
+
+After:
+$ make run-userillegalop-nox
+...
+SMP: CPU 0 found 1 CPU(s)
+enabled interrupts: 1 2
+[00000000] new env 00001000
+Challenge!! Illegal opcode handler in user mode!
+[00001000] user general protection fault va 00000000 ip 0080005c
+TRAP frame at 0xf02b5000 from CPU 0
+  edi  0x00000000
+  esi  0x00000000
+  ebp  0xeebfdfd0
+  oesp 0xefffffdc
+  ebx  0x00000000
+  edx  0x00001000
+  ecx  0x00800f32
+  eax  0x00800033
+  es   0x----0023
+  ds   0x----0023
+  trap 0x0000000d General Protection
+  err  0x00000000
+  eip  0x0080005c
+  cs   0x----001b
+  flag 0x00000286
+  esp  0xeebfdfbc
+  ss   0x----0023
+[00001000] free env 00001000
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+... 
+
+
+general protection: 
+  asm volatile("int $14");
+in user/usergpfault.c
+
+Before:
+$ make run-usergpfault-nox
+...
+SMP: CPU 0 found 1 CPU(s)
+enabled interrupts: 1 2
+[00000000] new env 00001000
+Challenge!! Illegal opcode handler in user mode!
+[00001000] user general protection fault va 00000000 ip 0080005c
+TRAP frame at 0xf02b5000 from CPU 0
+  edi  0x00000000
+  esi  0x00000000
+  ebp  0xeebfdfd0
+  oesp 0xefffffdc
+  ebx  0x00000000
+  edx  0x00001000
+  ecx  0x00800f32
+  eax  0x00800033
+  es   0x----0023
+  ds   0x----0023
+  trap 0x0000000d General Protection
+  err  0x00000000
+  eip  0x0080005c
+  cs   0x----001b
+  flag 0x00000286
+  esp  0xeebfdfbc
+  ss   0x----0023
+[00001000] free env 00001000
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+...
+
+After:
+$ make run-usergpfault-nox
+...
+SMP: CPU 0 found 1 CPU(s)
+enabled interrupts: 1 2
+[00000000] new env 00001000
+Challenge!! general protection fault handler in user mode
+Running...
+[00001000] exiting gracefully
+[00001000] free env 00001000
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+...
+
+
+divide by zero:
+  int x, y;
+  x = 3;
+  y = 0;
+  cprintf("%d\n", x/y);
+in user/userdivide0.c
+
+Before:
+$ make run-userdivide0-nox
+...
+SMP: CPU 0 found 1 CPU(s)
+enabled interrupts: 1 2
+[00000000] new env 00001000
+[00001000] user divide by zero va 00000000 ip 00800058
+TRAP frame at 0xf02b5000 from CPU 0
+  edi  0x00000000
+  esi  0x00000000
+  ebp  0xeebfdfd0
+  oesp 0xefffffdc
+  ebx  0x00000000
+  edx  0x00000000
+  ecx  0x00000000
+  eax  0x00000003
+  es   0x----0023
+  ds   0x----0023
+  trap 0x00000000 Divide error
+  err  0x00000000
+  eip  0x00800058
+  cs   0x----001b
+  flag 0x0000021a
+  esp  0xeebfdfb8
+  ss   0x----0023
+[00001000] free env 00001000
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+...
+
+After:
+$ make run-userdivide0-nox
+...
+SMP: CPU 0 found 1 CPU(s)
+enabled interrupts: 1 2
+[00000000] new env 00001000
+Challenge!! Divide by zero handler in user mode! The wrong answer generated is: 3
+Running...
+[00001000] exiting gracefully
+[00001000] free env 00001000
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+Type 'help' for a list of commands.
+K> 
+
+
+Exercise 5
+lock_kernel() added in i386_init(), mp_main() at init.c,　trap() at trap.c, and unlock_kernel() added in env_run() at env.c.
+
+Exercise 6
+$ make qemu-nox CPUS=1
+...
+SMP: CPU 0 found 1 CPU(s)
+enabled interrupts: 1 2
+[00000000] new env 00001000
+[00000000] new env 00001001
+[00000000] new env 00001002
+Hello, I am environment 00001000.
+Hello, I am environment 00001001.
+Hello, I am environment 00001002.
+Back in environment 00001000, iteration 0.
+Back in environment 00001001, iteration 0.
+Back in environment 00001002, iteration 0.
+Back in environment 00001000, iteration 1.
+Back in environment 00001001, iteration 1.
+Back in environment 00001002, iteration 1.
+Back in environment 00001000, iteration 2.
+Back in environment 00001001, iteration 2.
+Back in environment 00001002, iteration 2.
+Back in environment 00001000, iteration 3.
+Back in environment 00001001, iteration 3.
+Back in environment 00001002, iteration 3.
+Back in environment 00001000, iteration 4.
+All done in environment 00001000.
+[00001000] exiting gracefully
+[00001000] free env 00001000
+Back in environment 00001001, iteration 4.
+All done in environment 00001001.
+[00001001] exiting gracefully
+[00001001] free env 00001001
+Back in environment 00001002, iteration 4.
+All done in environment 00001002.
+[00001002] exiting gracefully
+[00001002] free env 00001002
+No runnable environments in the system!
+
+Exercise 12
+$ make run-forktree-nox
+...
+SMP: CPU 0 found 1 CPU(s)
+enabled interrupts: 1 2
+[00000000] new env 00001000
+1000: I am ''
+[00001000] new env 00001001
+[00001000] new env 00001002
+1001: I am '0'
+[00001001] new env 00001003
+[00001001] new env 00001004
+1003: I am '00'
+[00001003] new env 00001005
+[00001000] exiting gracefully
+[00001000] free env 00001000
+1002: I am '1'
+[00001002] new env 00002000
+[00001001] exiting gracefully
+[00001001] free env 00001001
+[00001003] new env 00002001
+1004: I am '01'
+[00001004] new env 00001006
+1005: I am '000'
+[00001005] exiting gracefully
+[00001005] free env 00001005
+[00001002] new env 00002005
+[00001003] exiting gracefully
+[00001003] free env 00001003
+2000: I am '10'
+[00002000] new env 00002003
+2001: I am '001'
+[00002001] exiting gracefully
+[00002001] free env 00002001
+[00001004] new env 00003001
+1006: I am '010'
+[00001006] exiting gracefully
+[00001006] free env 00001006
+[00001002] exiting gracefully
+[00001002] free env 00001002
+2005: I am '11'
+[00002005] new env 00002002
+[00001004] exiting gracefully
+[00001004] free env 00001004
+3001: I am '011'
+[00003001] exiting gracefully
+[00003001] free env 00003001
+[00002000] new env 00004001
+2003: I am '100'
+[00002003] exiting gracefully
+[00002003] free env 00002003
+[00002005] new env 00003003
+[00002000] exiting gracefully
+[00002000] free env 00002000
+4001: I am '101'
+[00004001] exiting gracefully
+[00004001] free env 00004001
+2002: I am '110'
+[00002002] exiting gracefully
+[00002002] free env 00002002
+[00002005] exiting gracefully
+[00002005] free env 00002005
+3003: I am '111'
+[00003003] exiting gracefully
+[00003003] free env 00003003
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+...
+
+Exercise 13
+$ make run-spin-nox
+...
+SMP: CPU 0 found 1 CPU(s)
+enabled interrupts: 1 2
+[00000000] new env 00001000
+I am the parent.  Forking the child...
+[00001000] new env 00001001
+TRAP frame at 0xf0297000 from CPU 0
+  edi  0x00001001
+  esi  0x00802000
+  ebp  0xeebfdfb0
+  oesp 0xefffffdc
+  ebx  0x2d527000
+  edx  0x00000000
+  ecx  0x00802000
+  eax  0x00000000
+  es   0x----0023
+  ds   0x----0023
+  trap 0x0000002b Hardware Interrupt
+  err  0x00000000
+  eip  0x0080107c
+  cs   0x----001b
+  flag 0x00000246
+  esp  0xeebfdf78
+  ss   0x----0023
+[00001000] free env 00001000
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+...
+
+
+Exercise 14
+$ make run-spin-nox CPUS=3
+...
+SMP: CPU 0 found 3 CPU(s)
+enabled interrupts: 1 2
+SMP: CPU 1 starting
+SMP: CPU 2 starting
+[00000000] new env 00001000
+I am the parent.  Forking the child...
+[00001000] new env 00001001
+I am the parent.  Running the child...
+I am the child.  Spinning...
+I am the parent.  Killing the child...
+[00001000] destroying 00001001
+[00001000] free env 00001001
+[00001000] exiting gracefully
+[00001000] free env 00001000
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+... 
+
+$ make qemu-nox CPUS=2
+...
+SMP: CPU 0 found 2 CPU(s)
+enabled interrupts: 1 2
+SMP: CPU 1 starting
+[00000000] new env 00001000
+[00000000] new env 00001001
+[00000000] new env 00001002
+Hello, I am environment 00001000.
+Hello, I am environment 00001001.
+Back in environment 00001000, iteration 0.
+Hello, I am environment 00001002.
+Back in environment 00001001, iteration 0.
+Back in environment 00001002, iteration 0.
+Back in environment 00001000, iteration 1.
+Back in environment 00001001, iteration 1.
+Back in environment 00001002, iteration 1.
+Back in environment 00001002, iteration 2.
+Back in environment 00001000, iteration 2.
+Back in environment 00001001, iteration 2.
+Back in environment 00001002, iteration 3.
+Back in environment 00001002, iteration 4.
+All done in environment 00001002.
+Back in environment 00001001, iteration 3.
+[00001002] exiting gracefully
+[00001002] free env 00001002
+Back in environment 00001000, iteration 3.
+Back in environment 00001001, iteration 4.
+Back in environment 00001000, iteration 4.
+All done in environment 00001001.
+[00001001] exiting gracefully
+[00001001] free env 00001001
+All done in environment 00001000.
+[00001000] exiting gracefully
+[00001000] free env 00001000
+No runnable environments in the system!
+Welcome to the JOS kernel monitor!
+... 
+
+Exercise 15
+$ make run-primes-nox
+...
+SMP: CPU 0 found 1 CPU(s)
+enabled interrupts: 1 2
+[00000000] new env 00001000
+[00001000] new env 00001001
+CPU 0: 2 [00001001] new env 00001002
+CPU 0: 3 [00001002] new env 00001003
+CPU 0: 5 [00001003] new env 00001004
+CPU 0: 7 [00001004] new env 00001005
+CPU 0: 11 [00001005] new env 00001006
+CPU 0: 13 [00001006] new env 00001007
+CPU 0: 17 [00001007] new env 00001008
+CPU 0: 19 [00001008] new env 00001009
+CPU 0: 23 [00001009] new env 0000100a
+...
+
