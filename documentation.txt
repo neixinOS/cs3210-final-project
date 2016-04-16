@@ -1,0 +1,43 @@
+pmap.c: 
+对于PGSIZE的空间如何分配又是一件很复杂的事情，所以参考了之前关于pages和envs空间的申请的方
+法，我直接在内存中申请了一片空间做为我的RAID硬盘的空间。并在其中加入对应的虚拟地址的映射，
+方便我的检测用户程序使用。由于JOS会检查我申请空间是否位被使用，我需要将那处的检查删去，才能
+成功运行我的程序。
+line 23
+int nraid2_disks = 100;
+struct My_Disk* raid2_disks;
+struct My_Disk* origin_raid2_disk[7];
+struct My_Disk* user_raid2_disk[7];
+int now_raid2_add;
+int now_raid2_disk;
+int nn_add[7] = {0, 0, 4, 0, 5, 6, 2}; 
+#define URAID 0x700000 (memlayout.h)
+
+line 179
+raid2_disks = (struct My_Disk*) boot_alloc(nraid2_disks * sizeof(struct My_Disk));
+
+line 219
+// allocate space for raid
+boot_map_region(kern_pgdir, URAID, ROUNDUP(nraid2_disks * sizeof(struct My_Disk), PGSIZE), PADDR(raid2_disks), PTE_U | PTE_P);
+
+line 895 delete check
+
+
+
+pmap.h: add some definition at the end
+dirty标示该硬盘是否被改过或者污染，next标示我的该组硬盘下一个硬盘是哪一个，now标示我的dat
+a写到了第几位，data表示我的硬盘的数据，data这里为了方便我直接使用了int，其实可以把它改称
+一个数组，占更大的空间，这样更符合实际。
+
+
+
+kern/syscall.c: add some system calls
+
+inc/lib.h: line 62 add some prototype
+
+inc/syscall.h: prototype
+
+lib/syscall.c: end
+
+user/faulrwrite.c
+
