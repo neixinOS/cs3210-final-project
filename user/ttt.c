@@ -1,4 +1,5 @@
 #include <inc/lib.h>
+#include <inc/x86.h>
 
 char board[3][3];
 void init_board(void);
@@ -37,7 +38,7 @@ void player_move(void)
   int x;
   char *buf;
   int row, col;
-  //cprintf("Enter your move: ");
+  cprintf("Enter your move: ");
   int read;
   read = 1;
   while (read == 1) {
@@ -164,6 +165,7 @@ umain(int argc, char **argv)
     cprintf("You lose!\n");
   }
   display_board();
+  breakpoint();
   //init_board();
   
 }
