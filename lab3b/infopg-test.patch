@@ -1,0 +1,43 @@
+From a32b55b235a177b2e6456f3cd0844cc04cbe9852 Mon Sep 17 00:00:00 2001
+From: Sanidhya Kashyap <sanidhya.gatech@gmail.com>
+Date: Wed, 10 Feb 2016 22:00:08 -0500
+Subject: [PATCH] testing info-pg implicitly
+
+---
+ kern/init.c    | 3 +++
+ kern/monitor.c | 5 +++++
+ 2 files changed, 8 insertions(+)
+
+diff --git a/kern/init.c b/kern/init.c
+index 9d39373..ed77b70 100644
+--- a/kern/init.c
++++ b/kern/init.c
+@@ -29,6 +29,9 @@ i386_init(void)
+   // Lab 2 memory management initialization functions
+   mem_init();
+ 
++  // testing info-pg
++  mon_infopg( 0, 0, 0);
++
+   // Drop into the kernel monitor.
+   while (1)
+     monitor(NULL);
+diff --git a/kern/monitor.c b/kern/monitor.c
+index 7510d02..1f6c28f 100644
+--- a/kern/monitor.c
++++ b/kern/monitor.c
+@@ -88,6 +88,11 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
+ }
+ 
+ 
++int
++mon_infopg(int argc, char **argv, struct Trapframe *tf)
++{
++    return -1;
++}
+ 
+ /***** Kernel monitor command interpreter *****/
+ 
+-- 
+2.5.0
+

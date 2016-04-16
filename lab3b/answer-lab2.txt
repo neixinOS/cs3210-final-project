@@ -1,0 +1,140 @@
+E1.
+4) Then extended memory [EXTPHYSMEM, ...). Some of it is in use, some is free. Where is the kernel in physical memory?  Which pages are already in use for page tables and other data structures?
+the kernel in physical memory is:(char *)pages + (npages * sizeof(struct PageInfo)) - 0xf0000000, i = (int)ROUNDUP(((char *)pages + (npages * sizeof(struct PageInfo)) - 0xf0000000), PGSIZE)/PGSIZE, memory after i is free. 
+
+E3.
+(qemu) xp/10i 0x100000
+0x00100000:  add    0x1bad(%eax),%dh
+0x00100006:  add    %al,(%eax)
+0x00100008:  decb   0x52(%edi)
+0x0010000b:  in     $0x66,%al
+0x0010000d:  movl   $0xb81234,0x472
+0x00100017:  push   %eax
+0x00100018:  adc    %eax,(%eax)
+0x0010001a:  mov    %eax,%cr3
+0x0010001d:  mov    %cr0,%eax
+0x00100020:  or     $0x80010001,%eax
+
+(gdb) x/10i 0xf0100000
+   0xf0100000 <_start+4026531828>:	
+    add    0x1bad(%eax),%dh
+   0xf0100006 <_start+4026531834>:	add    %al,(%eax)
+   0xf0100008 <_start+4026531836>:	decb   0x52(%edi)
+   0xf010000b <_start+4026531839>:	in     $0x66,%al
+   0xf010000d <entry+1>:	movl   $0xb81234,0x472
+   0xf0100017 <entry+11>:	push   %eax
+   0xf0100018 <entry+12>:	adc    %eax,(%eax)
+   0xf010001a <entry+14>:	mov    %eax,%cr3
+   0xf010001d <entry+17>:	mov    %cr0,%eax
+   0xf0100020 <entry+20>:	or     $0x80010001,%eax
+
+Q1.
+Assuming that the following JOS kernel code is correct, what type should variable x have, uintptr_t or physaddr_t?
+uintptr_t (all pointers points to virtual address)
+
+Q2.
+ROPAGES from 0xef000000 to 0xef40000 and bootstack from 0xefff8000 to 0xf0000000.
+
+Q3.
+For safety concern user should not be able to access kernel's memory, as PTE_U is not enabled (page directory/page table).
+
+Q4.
+The maximum amount of physical memory that this operating system can support is 2 GB. The maximum size of UPAGES is 4 MB, sizeof(struct PageInfo)) = 8 byte, we have at most 4 MB / 8 B = 512 K pages, and since the size of one page is 4 KB, we can have at most 512 K * 4 KB = 2 GB physical memory. （PTSIZE above UPAGES contains 1/3 M pages (struct PageInfo), each page corresponds 4 KB, so in total around 1.3 GB physical memory.）
+
+Q5.
+The total overhead is 1025 * 4 KB + 2 MB, including 1) 4 MB PageInfos (1024 * 4 KB) to manage memory, 2) 4 KB for Page Directory, and 3) 2 MB for page table. 
+
+Q6.
+(why is this okay?) 
+In entrypgdir.c we have
+__attribute__((__aligned__(PGSIZE)))
+pde_t entry_pgdir[NPDENTRIES] = {
+  // Map VA's [0, 4MB) to PA's [0, 4MB)
+  [0]
+    = ((uintptr_t)entry_pgtable - KERNBASE) + PTE_P,
+  // Map VA's [KERNBASE, KERNBASE+4MB) to PA's [0, 4MB)
+  [KERNBASE>>PDXSHIFT]
+    = ((uintptr_t)entry_pgtable - KERNBASE) + PTE_P + PTE_W
+};
+After entry.S, it will be used; it maps the high virtual address to boot loader which will load it to low physical address 0x100000.
+
+mov $relocated, %eax 
+jmp *%eax 
+After this finished we transition to running at an EIF brave KERNBASE. As entry_pgdir maps va [0, 4MB) and [KERNBASE, KERNBASE + 4MB) to pa [0, 4MB). This transition is necessary since a kern_pgdir will be loaded later, and va [0, 4MB) will be abandoned.
+
+Challenge: Extend the JOS kernel monitor with commands
+add functions in monitor.c and add prototype in monitor.h
+K> help
+help - Display this list of commands
+info-kern - Display information about the kernel
+showmappings - Display physical page mappings and their permission bits
+setmapping - set, clear, or change the permissions of mapping
+dumpcontents - Dump the contents of a range of memory
+pagedirectory - show the page directory entry information
+
+(first of all we need to translate the string to virtual address by str2va function)
+
+1. display the physical page mapping and correspond permission bits that apply to virtual address from begin address to end address by showmappings function;
+Command should be: showmappings [addr1] [addr2]
+Example: showmappings 0xf0000000 0xf0002000
+         physical page mappings from 0xf0000000 to 0xf0002000
+K> showmappings 0xf0100000 0xf0103000
+page: f0100000, PTE_P: 1, PTE_W: 2, PTE_U: 0
+page: f0101000, PTE_P: 1, PTE_W: 2, PTE_U: 0
+page: f0102000, PTE_P: 1, PTE_W: 2, PTE_U: 0
+page: f0103000, PTE_P: 1, PTE_W: 2, PTE_U: 0
+ 
+2. set, clear, and change the permission of any mapping in the current address space by setmapping function;
+K> setmapping
+Command should be: setmapping [addr] [0|1] [P|W|U]
+Example: setmapping 0xf0000010 1 P
+         set the permission of PTE_P at 0xf0000010
+K> setmapping 0xf0100000 0 P
+1: page: f0100000, PTE_P: 1, PTE_W: 2, PTE_U: 0
+2: page: f0100000, PTE_P: 0, PTE_W: 2, PTE_U: 0
+K> setmapping 0xf0100000 1 U
+1: page: f0100000, PTE_P: 0, PTE_W: 2, PTE_U: 0
+2: page: f0100000, PTE_P: 0, PTE_W: 2, PTE_U: 4
+K> setmapping 0xf0100000 0 W
+1: page: f0100000, PTE_P: 0, PTE_W: 2, PTE_U: 4
+2: page: f0100000, PTE_P: 0, PTE_W: 0, PTE_U: 4
+
+3. dump the contents of a range of memory given either a virtual or physical address range by dumpcontents function.
+K> dumpcontents
+Command should be: dumpcontents [v|p] [addr1] [addr2]
+Example: dumpcontents v 0xf0000000 0xf0000010
+         dump contents between virtual address 0xf0000000 and 0xf0000010
+K> dumpcontents p 0x100000 0x100010
+0x1badb002 
+0x00000000 
+0xe4524ffe 
+0x7205c766
+K> dumpcontents p 0x100000 0x100013
+0x1badb002
+0x00000000
+0xe4524ffe
+0x7205c766
+K> dumpcontents v 0xf0100000 0xf0100010
+0x1badb002 
+0x00000000 
+0xe4524ffe 
+0x7205c766 
+K> dumpcontents v 0xf0100000 0xf0100012
+0x1badb002 
+0x00000000 
+0xe4524ffe 
+0x7205c766 
+K> dumpcontents v 0xf0100000 0xf0100014
+0x1badb002
+0x00000000
+0xe4524ffe
+0x7205c766
+0x34000004
+
+4. I have implemented pagedirectory function to show the information at given entry of page directory to help debug kernel.
+K> pagedirectory
+Command should be: pagedirectory [entrynumber]
+Example: pagedirectory 0x01
+         show kernel page directory[1] infomation 
+K> pagedirectory 0x01
+pgdir[1] = 0x00000000

@@ -1,0 +1,119 @@
+The Weird Machine
+=================
+Before you follow this tutorial, PLEASE BACKUP your JOS. Simply Copy your JOS
+to other directory and play this tutorial with your backup.
+
+In cs3210-pub/tut/tut5, you must see 3 files:
+  - README
+  - infopg-test.patch
+  - test-infopg
+
+
+DESCRIPTION
+-----------
+
+In this tutorial, we will perform the following task:
+  - Implement a page table information for JOS
+
+Display page table information via monitoring in JOS
+-----------------------------------------------------
+
+Earlier, in lab1, you have already added the "backtrace"
+monitor command in the monitor.c file to print the stack
+trace. Using the same functionality, you have to implement
+the page tables information that gives an overview of
+virtual address ranges, their respective flags and
+the physical addresses.
+
+You should generate the following output on the JOS command line
+after typing info-pg.
+    K> info-pg
+    cr3 = 00118000 (phys)
+    [003bc000-003bd000]  PDE[003fd000]  ------UWP
+    [f03fd000-f03fd080] PTE[0000-0032] --------- 00119000 .. 00139000 (phys)
+    [003bd000-003be000]  PDE[00118000]  ------U-P
+    [f0118ef0-f0118ef0] PTE[0956-0956] ------U-P 003fd000 .. 003fd000 (phys)
+    [f0118ef4-f0118ef4] PTE[0957-0957] --------- 00118000 .. 00118000 (phys)
+    [f0118efc-f0118efc] PTE[0959-0959] ---A--UWP 003fe000 .. 003fe000 (phys)
+    [f0118f00-f0118f40] PTE[0960-0976] ------UWP 003ff000 .. 003ed000 (phys)
+    [f0118f44-f0118ffc] PTE[0977-1023] ------UWP 003ec000 .. 003be000 (phys)
+    [003bf000-003c0000]  PDE[003fe000]  ------UWP
+    [f03fefe0-f03feffc] PTE[1016-1023] -------WP 0010d000 .. 00114000 (phys)
+    [003c0000-003c1000]  PDE[003ff000]  ---A--UWP
+    [f03ff000-f03ff000] PTE[0000-0000] --DA---WP 00000000 .. 00000000 (phys)
+    [f03ff004-f03ff27c] PTE[0001-0159] -------WP 00001000 .. 0009f000 (phys)
+    [f03ff280-f03ff2dc] PTE[0160-0183] --DA---WP 000a0000 .. 000b7000 (phys)
+    [f03ff2e0-f03ff2e0] PTE[0184-0184] -------WP 000b8000 .. 000b8000 (phys)
+    [f03ff2e4-f03ff3fc] PTE[0185-0255] ---A---WP 000b9000 .. 000ff000 (phys)
+    [f03ff400-f03ff410] PTE[0256-0260] -------WP 00100000 .. 00104000 (phys)
+    [f03ff414-f03ff44c] PTE[0261-0275] --DA---WP 00105000 .. 00113000 (phys)
+    [f03ff450-f03ff450] PTE[0276-0276] -------WP 00114000 .. 00114000 (phys)
+                                        .
+                                        .
+                                        .
+    [003fd000-003fe000]  PDE[003c0000]  ------UWP
+    [f03c0000-f03c0ffc] PTE[0000-1023] -------WP 0f400000 .. 0f7ff000 (phys)
+    [003fe000-003ff000]  PDE[003bf000]  ------UWP
+    [f03bf000-f03bfffc] PTE[0000-1023] -------WP 0f800000 .. 0fbff000 (phys)
+    [003ff000-00400000]  PDE[003be000]  ------UWP
+    [f03be000-f03beffc] PTE[0000-1023] -------WP 0fc00000 .. 0ffff000 (phys)
+
+
+Here, info-pg is the monitoring command that first prints
+the cr3 register value, then traverses the entries of page
+directory entries and prints the contiguous page table entries.
+The output format is as follows:
+
+  [vbeg-vend] PDE[PDE addr] FLAGS
+  [vbeg-vend] PTE[PTE addr] FLAGS phys-beg .. phys-end (phys)
+
+The FLAGS can be obtained by looking at the page table
+entry flags in inc/mmu.h file.
+
+vbeg and vend are the virtual addresses whereas phys-beg
+and phys-end are the physical addresses.
+
+You can refer to the following code snippet that was implemented
+in the qemu monitor source for printing the information stored
+on the qemu side. Here is the following link:
+
+  https://github.com/geofft/qemu/commit/7e3b0f8fa3f8b3c3af151a30fbe864c9bd426310
+
+In the above link, you will find that the implementation is for
+64 bit architecture, that is why they have 4 levels of page
+translations. However, since we are working on 32 bit architecture,
+you will only have two levels of translations. You can refer
+the above code in the given link to print the required information.
+
+
+EXERCISE
+--------
+
+In order to verify the correctness of your code, we have also
+given "test-pginfo" script for the grading purpose.
+
+First apply the patch "infopg-test.patch" to your lab2 branch and
+then implement your code in mon_infopg() function after applying
+the patch.
+
+To checkout to lab2
+
+  $ git checkout lab2
+
+To apply the patch, please do the following:
+
+  $ git am < infopg-test.patch
+
+This should be done in the cs3210-lab or backup folder since you have the
+jos source code available there.
+
+NOTE: Please implement and test your code on the completed lab2
+as the testing script is based on that branch(lab2).
+
+SUBMISSION
+----------
+
+This is going to be an in-class exercise which you should
+show to the TAs and the submission deadline is Thursday,
+11th February, 11:59 PM. The submission format is
+tut05-ex.txt.

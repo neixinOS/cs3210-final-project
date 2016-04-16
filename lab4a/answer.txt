@@ -1,0 +1,159 @@
+3.
+At 0x7c2d (before calling bootmain), the processor start executing 32-bit code: 
+ljmp $PROT_MODE_CSEG, $protcseg
+7c2d:	ea 32 7c 08 00 66 b8 	ljmp   $0xb866,$0x87c32
+
+The last instruction of the boot loader executed is to call entry at 0x7d61: 
+((void (*)(void))(ELFHDR->e_entry))();
+    7d61:	ff 15 18 00 01 00    	call   *0x10018
+
+The first instruction of the kernel it just loaded is to warm boot at 0xf01000c:
+f010000c:	66 c7 05 72 04 00 00 	movw   $0x1234,0x472
+
+The first instruction of the kernel is at 0x10018.
+
+The boot loader decide how many sectors it must read by reading the number of program headers in the ELF header:
+
+  // load each program segment (ignores ph flags)
+  ph = (struct Proghdr *)((uint8_t *)ELFHDR + ELFHDR->e_phoff);
+  eph = ph + ELFHDR->e_phnum;
+  for (; ph < eph; ph++)
+    // p_pa is the load address of this segment (as well
+    // as the physical address)
+    readseg(ph->p_pa, ph->p_memsz, ph->p_offset);
+
+5.
+The first interaction that weed break is at 0x7c2d: ljmp $PROT_MODE_CSEG, $protcseg
+(gdb) b *0x7c2d
+Breakpoint 1 at 0x7c2d
+(gdb) c
+Continuing.
+[   0:7c2d] => 0x7c2d:	ljmp   $0x8,$0x7c32
+After changing the link address to 0x7d00:
+(gdb) b *0x7c2d
+Breakpoint 1 at 0x7c2d
+(gdb) c
+Continuing.
+[   0:7c2d] => 0x7c2d:	ljmp   $0x8,$0x7d32
+
+6.
+The BOIS just enters the good loader at 0x7c00:
+(gdb) x/8x 0x100000
+0x100000:	0x00000000	0x00000000	0x00000000	0x00000000
+0x100010:	0x00000000	0x00000000	0x00000000	0x00000000
+The boot loader enters the kernel at 0x7d61:
+(gdb) x/8x 0x100000
+0x100000:	0x1badb002	0x00000000	0xe4524ffe	0x7205c766
+0x100010:	0x34000004	0x0000b812	0x220f0011	0xc0200fd8
+They are different as it cals the entry point from the ELF header
+
+7.
+=> 0x100025:	mov    %eax,%cr0
+0x00100025 in ?? ()
+(gdb) x/8x 0x100000
+0x100000:	0x1badb002	0x00000000	0xe4524ffe	0x7205c766
+0x100010:	0x34000004	0x0000b812	0x220f0011	0xc0200fd8
+(gdb) x/8x 0xf0100000
+0xf0100000 <_start+4026531828>:	0x00000000	0x00000000	0x00000000	0x00000000
+0xf0100010 <entry+4>:	0x00000000	0x00000000	0x00000000	0x00000000
+
+=> 0x100028:	mov    $0xf010002f,%eax
+0x00100028 in ?? ()
+(gdb) x/8x 0x100000
+0x100000:	0x1badb002	0x00000000	0xe4524ffe	0x7205c766
+0x100010:	0x34000004	0x0000b812	0x220f0011	0xc0200fd8
+(gdb) x/8x 0xf0100000
+0xf0100000 <_start+4026531828>:	0x1badb002	0x00000000	0xe4524ffe	0x7205c766
+0xf0100010 <entry+4>:	0x34000004	0x0000b812	0x220f0011	0xc0200fd8
+
+The first instruction after the new mapping is established that would fail is:
+jmp	*%eax
+f010002d:	ff e0                	jmp    *%eax
+as the previous instruction:
+mov	$relocated, %ex
+f0100028:	b8 2f 00 10 f0       	mov    $0xf010002f,%eax
+makes eax outside of RAM
+
+qemu: fatal: Trying to execute code outside RAM or ROM at 0xf010002c
+
+8.
+1) kern/console.c exports cputchar (getchar and iscons), which is used by kern/printf.c to implement cprintf console output for the kernel.
+2) It scrolls down one row to show new information as the the console butter is full, which also means the screen is full.
+3) fmt points to the format string of arguments ("x %d, y %x, z %d\n"); ap points to the variable arguments list after fmt.
+4) The output is He110 World, as 57616=0xe110, and for i = 0x00646c72, we have ‘r’ = (char)0x72, ‘l’ = (char)0x6c, ‘d’ = (char)0x64, and 0x00 which represents the end of string. If the x86 were big-endian, we could set i = 0x4e362600, while we do not change 57616.
+5) it will print the decimal value of the 4 bytes above ‘3’ in stack.
+6) Wo could add an argument after the last argument to represent the number of previous arguments.
+
+9.
+The kernel initializes its stack at f0100034:
+	movl	$(bootstacktop),%esp
+f0100034:	bc 00 00 11 f0       	mov    $0xf0110000,%esp
+so it is allocated at 0xf0110000.
+The kernel reserve space for its stack by using .space as:
+
+.data
+###################################################################
+# boot stack
+###################################################################
+	.p2align	PGSHIFT		# force page alignment
+	.globl		bootstack
+bootstack:
+	.space		KSTKSIZE
+	.globl		bootstacktop   
+bootstacktop:
+
+and the stack pointer points to the boootstacktop (lowest location).
+
+10.
+(gdb) b *0xf0100040
+Breakpoint 1 at 0xf0100040: file kern/init.c, line 13.
+(gdb) c
+Continuing.
+The target architecture is assumed to be i386
+=> 0xf0100040 <test_backtrace>:	push   %ebp
+
+Breakpoint 1, test_backtrace (x=5) at kern/init.c:13
+13	{
+(gdb) i r
+eax            0x0	0
+ecx            0x3d4	980
+edx            0x3d5	981
+ebx            0x10094	65684
+esp            0xf010ffdc	0xf010ffdc
+ebp            0xf010fff8	0xf010fff8
+esi            0x10094	65684
+edi            0x0	0
+eip            0xf0100040	0xf0100040 <test_backtrace>
+eflags         0x82	[ SF ]
+cs             0x8	8
+ss             0x10	16
+ds             0x10	16
+es             0x10	16
+fs             0x10	16
+gs             0x10	16
+(gdb) c
+Continuing.
+=> 0xf0100040 <test_backtrace>:	push   %ebp
+
+Breakpoint 1, test_backtrace (x=4) at kern/init.c:13
+13	{
+(gdb) i r
+eax            0x4	4
+ecx            0x3d4	980
+edx            0x3d5	981
+ebx            0x5	5
+esp            0xf010ffbc	0xf010ffbc
+ebp            0xf010ffd8	0xf010ffd8
+esi            0x10094	65684
+edi            0x0	0
+eip            0xf0100040	0xf0100040 <test_backtrace>
+eflags         0x6	[ PF ]
+cs             0x8	8
+ss             0x10	16
+ds             0x10	16
+es             0x10	16
+fs             0x10	16
+gs             0x10	16
+
+Eight 32-bit words (return address, saved bp, saved ex, 4 registers, and var x to call the next recursive nesting) are pushed on the stack each recursive nesting level, since the ebf chanes from 0xf010fff8 to 0xf010ffd8 (0x20 in hex = 32'd, 32/4 = 8).
+
