@@ -153,3 +153,23 @@ sys_net_try_receive(char *data, int *len)
 {
   return syscall(SYS_net_try_receive, 1, (uint32_t) data, (uint32_t) len, 0, 0, 0); 
 }
+
+
+// raid
+int 
+sys_raid2_init(void) 
+{
+  return syscall(SYS_raid2_init, 0, 0, 0, 0, 0, 0);
+}
+int sys_raid2_add(int num, int* a) 
+{
+  return syscall(SYS_raid2_add, 0, num, (uint32_t) a, 0, 0, 0);
+}
+int sys_raid2_change(int isdisk, int num, int change) 
+{
+  return syscall(SYS_raid2_change, 0, isdisk, num, change, 0, 0);
+}
+int sys_raid2_check(void) 
+{
+  return syscall(SYS_raid2_check, 0, 0, 0, 0, 0, 0);
+}

@@ -91,3 +91,19 @@ page2kva(struct PageInfo *pp)
 pte_t *pgdir_walk(pde_t *pgdir, const void *va, int create);
 
 #endif /* !JOS_KERN_PMAP_H */
+
+
+// raid
+struct My_Disk {
+	bool dirty;
+	struct My_Disk* next;
+	int now;
+	int data;
+};
+int nraid2_disks;
+struct My_Disk raid2_disks[100];
+struct My_Disk* origin_raid2_disk[7];
+struct My_Disk* user_raid2_disk[7];
+int now_raid2_add;
+int now_raid2_disk;
+// int nn_add[7]; 
