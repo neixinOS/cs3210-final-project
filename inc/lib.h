@@ -63,6 +63,7 @@ int     sys_env_set_pgfault_upcall(envid_t env, void *upcall);
 
 // lab 6, a system call that lets you transmit packets from user space
 int     sys_net_pkt_transmit(char *data, int length);
+int sys_net_try_receive(char *data, int *len);
 //challenge
 int	sys_env_set_gpfault_upcall(envid_t env, void *upcall);
 int	sys_env_set_divide0_upcall(envid_t env, void *upcall);

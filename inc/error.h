@@ -25,8 +25,10 @@ enum {
   E_FILE_EXISTS,                // File already exists
   E_NOT_EXEC,                   // File not a valid executable
   E_NOT_SUPP,                   // Operation not supported
-  E_TX_FULL,		   	// Transmit queue is full
-  E_PKT_TOO_LONG,   		// Packet size is too long
+  // E1000 error codes
+  E_TX_FULL       = 16,   // Transfer queue is full
+  E_RCV_EMPTY     = 17,   // Receive queue is empty
+  E_PKT_TOO_LONG  = 18,   // Packet size is too big
   MAXERROR
 };
 

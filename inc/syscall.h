@@ -20,6 +20,7 @@ enum {
 
   SYS_time_msec,
   SYS_net_pkt_transmit,
+  SYS_net_try_receive,
 
   SYS_env_set_gpfault_upcall,
   SYS_env_set_divide0_upcall,
