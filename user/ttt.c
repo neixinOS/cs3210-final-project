@@ -1,5 +1,7 @@
-#include <inc/lib.h>
+// buggy program - causes a divide by zero exception
 
+#include <inc/lib.h>
+#include <inc/x86.h>
 char board[3][3];
 void init_board(void);
 char check(void);
@@ -164,6 +166,8 @@ umain(int argc, char **argv)
     cprintf("You lose!\n");
   }
   display_board();
+  breakpoint();
   //init_board();
   
 }
+
