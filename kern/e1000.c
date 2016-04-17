@@ -95,7 +95,8 @@ e1000_pci_attach(struct pci_func *pcif)
 
   // Set the Receive Descriptor Head and Tail Registers
   e1000[E1000_RDH] = 0x0;
-  e1000[E1000_RDT] = 0x0;
+  e1000[E1000_RDT] = E1000_RCVDESC - 1;
+  //e1000[E1000_RDT] = 0x0; //FUCK!
 
   // Initialize the Receive Control Register
   e1000[E1000_RCTL] |= E1000_RCTL_EN;
@@ -106,6 +107,7 @@ e1000_pci_attach(struct pci_func *pcif)
   e1000[E1000_RCTL] |= E1000_RCTL_BAM;
   e1000[E1000_RCTL] &= ~E1000_RCTL_SZ; // 2048 byte size
   e1000[E1000_RCTL] |= E1000_RCTL_SECRC;
+  cprintf("e1000[RCTL]: %p\n", e1000[E1000_RCTL]);
 
   return 0;
 }
@@ -163,22 +165,23 @@ e1000_pkt_transmit(char *data, int length)
 
 int
 e1000_pkt_receive(char *data) {
-  uint32_t rdt, len;
+  uint32_t rdt, idx, len;
   rdt = e1000[E1000_RDT];
+  idx = (rdt + 1) % E1000_RCVDESC;
   
-  if (rcv_desc_array[rdt].status & E1000_RXD_STAT_DD) {
+  if (rcv_desc_array[idx].status & E1000_RXD_STAT_DD) {
     cprintf("in pkt receive\n");
-    if (!(rcv_desc_array[rdt].status & E1000_RXD_STAT_EOP)) {
+    if (!(rcv_desc_array[idx].status & E1000_RXD_STAT_EOP)) {
       panic("Don't allow jumbo frames!\n");
     }
-    len = rcv_desc_array[rdt].length;
+    len = rcv_desc_array[idx].length;
     
-    memmove(data, rcv_pkt_bufs[rdt].buf, len);
+    memmove(data, rcv_pkt_bufs[idx].buf, len);
     //cprintf("E1000 rx len: %0dx\n", len);
     HEXDUMP("rx dump:", data, len);
-    rcv_desc_array[rdt].status &= ~E1000_RXD_STAT_DD;
-    rcv_desc_array[rdt].status &= ~E1000_RXD_STAT_EOP;
-    e1000[E1000_RDT] = (rdt + 1) % E1000_RCVDESC;
+    rcv_desc_array[idx].status &= ~E1000_RXD_STAT_DD;
+    rcv_desc_array[idx].status &= ~E1000_RXD_STAT_EOP;
+    e1000[E1000_RDT] = idx;
 
     return len;
   }
