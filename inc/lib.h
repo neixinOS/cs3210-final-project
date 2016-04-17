@@ -63,6 +63,7 @@ int     sys_env_set_pgfault_upcall(envid_t env, void *upcall);
 
 // lab 6, a system call that lets you transmit packets from user space
 int     sys_net_pkt_transmit(char *data, int length);
+int sys_net_try_receive(char *data, int *len);
 //challenge
 int	sys_env_set_gpfault_upcall(envid_t env, void *upcall);
 int	sys_env_set_divide0_upcall(envid_t env, void *upcall);
@@ -75,6 +76,13 @@ int     sys_page_unmap(envid_t env, void *pg);
 int     sys_ipc_try_send(envid_t to_env, uint32_t value, void *pg, int perm);
 int     sys_ipc_recv(void *rcv_pg);
 unsigned int sys_time_msec(void);
+
+
+// raid
+int sys_raid2_init(void);
+int sys_raid2_add(int num, int* a);
+int sys_raid2_change(int isdisk, int num, int change);
+int sys_raid2_check(void);
 
 // This must be inlined.  Exercise for reader: why?
 static __inline envid_t __attribute__((always_inline))

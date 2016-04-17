@@ -1,4 +1,3 @@
-// buggy program - causes a divide by zero exception
 
 #include <inc/lib.h>
 #include <inc/x86.h>
@@ -39,7 +38,7 @@ void player_move(void)
   int x;
   char *buf;
   int row, col;
-  //cprintf("Enter your move: ");
+  cprintf("Enter your move: ");
   int read;
   read = 1;
   while (read == 1) {

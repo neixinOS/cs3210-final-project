@@ -21,6 +21,7 @@ getchar(void)
   // JOS does, however, support standard _input_ redirection,
   // allowing the user to redirect script files to the shell and such.
   // getchar() reads a character from file descriptor 0.
+
   /*r = read(0, &c, 1);
   if (r < 0)
     return r;
@@ -29,7 +30,8 @@ getchar(void)
  while ((r = sys_cgetc()) == 0)
    sys_yield();
   return r;
- // return c;
+
+
 }
 
 
