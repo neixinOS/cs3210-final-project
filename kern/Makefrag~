@@ -116,8 +116,7 @@ KERN_BINFILES +=	user/userdivide0 \
 # Binary files for LAB5 challenge
 KERN_BINFILES +=	user/usermmap
 
-# Binary files for tic tac toe
-KERN_BINFILES +=	user/ttt
+KERN_BINFILES +=    user/ttt
 
 KERN_OBJFILES := $(patsubst %.c, $(OBJDIR)/%.o, $(KERN_SRCFILES))
 KERN_OBJFILES := $(patsubst %.S, $(OBJDIR)/%.o, $(KERN_OBJFILES))
