@@ -7,6 +7,7 @@
 #include <inc/string.h>
 #include <inc/stdarg.h>
 #include <inc/error.h>
+#include <inc/csa.h>
 
 /*
  * Space or zero padding and a field width are supported for the numeric
@@ -99,8 +100,10 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
 
   while (1) {
     while ((ch = *(unsigned char*)fmt++) != '%') {
-      if (ch == '\0')
+      if (ch == '\0') {
+	csa = 0x0700;
         return;
+      }
       putch(ch, putdat);
     }
 
@@ -240,6 +243,11 @@ number:
     // escaped '%' character
     case '%':
       putch(ch, putdat);
+      break;
+    
+    case 'm':
+      num = getint(&ap, lflag);
+      csa = num;
       break;
 
     // unrecognized escape sequence - just print it literally

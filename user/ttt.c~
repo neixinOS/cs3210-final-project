@@ -1,20 +1,14 @@
-#include <lwip/sockets.h>
-#include <lwip/inet.h>
 #include <inc/lib.h>
 #include <inc/x86.h>
+#include <inc/csa.h>
 
-#define PORT 7
-
-#define BUFFSIZE 32
-#define MAXPENDING 5 
 char board[3][3];
 void init_board(void);
 char check(void);
 void player_move(void);
 void computer_move(void);
-void display_board();
+void display_board(void);
 int check_available(int row, int column);
-static void die(char *m);
 void init_board(void)
 {
   board[0][0] = '1';
@@ -27,7 +21,7 @@ void init_board(void)
   board[2][1] = '8';
   board[2][2] = '9';
 }
-void display_board()
+void display_board(void)
 {
   int i;
 
@@ -139,62 +133,20 @@ char check(void)
 
   return 'C';
 }
-static void
-die(char *m)
-{
-  cprintf("%s\n", m);
-  exit();
-}
+
+
 void
 umain(int argc, char **argv)
 {
-  // check countinue (cont = 'C')/win (cont = 'X')/lose (cont = 'O') 
-  int serversock, clientsock;
-  struct sockaddr_in echoserver, echoclient;
-  char buffer[BUFFSIZE];
-  unsigned int echolen;
-  int received = 0;
-
+  // check countinue (cont = 'C')/win (cont = 'X')/lose (cont = 'O')
   char cont;
   cont = 'C';
-
-  //create the TCP socket
-  if ((serversock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
-    die("Failed to create socket");
-
-  cprintf("opened socket\n");
- // Construct the server sockaddr_in structure
-  memset(&echoserver, 0, sizeof(echoserver));             // Clear struct
-  echoserver.sin_family = AF_INET;                        // Internet/IP
-  echoserver.sin_addr.s_addr = htonl(INADDR_ANY);         // IP address
-  echoserver.sin_port = htons(PORT);                      // server port
-
-  cprintf("trying to bind\n");
-
-  // Bind the server socket
-  if (bind(serversock, (struct sockaddr *)&echoserver,
-           sizeof(echoserver)) < 0)
-    die("Failed to bind the server socket");
-
-  // Listen on the server socket
-  if (listen(serversock, MAXPENDING) < 0)
-    die("Failed to listen on server socket");
-
-  cprintf("bound\n");
-  cprintf("Single player Tic-Tac-Toe\n");
+  // cprintf("Single player Tic-Tac-Toe\n");
+  cprintf("%m%s\n", 0x0400, "red ttt");
   init_board();
   while (cont == 'C') {
-	unsigned int clientlen = sizeof(echoclient);
-	//wait for client connection
-	if ((clientsock =
-           accept(serversock, (struct sockaddr *)&echoclient,
-                  &clientlen)) < 0)
-      die("Failed to accept client connection");
-    cprintf("Client connected: %s\n", inet_ntoa(echoclient.sin_addr));
-    
     // display playboard
-    display_board(clientsock);
-
+    display_board();
     // get user input
     player_move();
     // check continute or not
@@ -210,7 +162,9 @@ umain(int argc, char **argv)
   }
 
   if (cont == 'X') {
-    cprintf("You win!\n");
+    cprintf("oh no\n");
+    cprintf("%m%s\n", 0x0200, "You win!");
+    //cprintf("You win!\n");
   } else {
     cprintf("You lose!\n");
   }
@@ -219,4 +173,3 @@ umain(int argc, char **argv)
   //init_board();
   
 }
-

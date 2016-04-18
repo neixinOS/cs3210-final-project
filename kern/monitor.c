@@ -6,7 +6,7 @@
 #include <inc/memlayout.h>
 #include <inc/assert.h>
 #include <inc/x86.h>
-
+#include <inc/csa.h>
 #include <kern/console.h>
 #include <kern/monitor.h>
 #include <kern/kdebug.h>
@@ -141,6 +141,8 @@ monitor(struct Trapframe *tf)
 
   cprintf("Welcome to the JOS kernel monitor!\n");
   cprintf("Type 'help' for a list of commands.\n");
+  cprintf("%m%s\n%m%s\n%m%s\n", 
+    0x0100, "blue", 0x0200, "green", 0x0400, "red");
 
   if (tf != NULL)
     print_trapframe(tf);

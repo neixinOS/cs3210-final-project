@@ -140,7 +140,8 @@ umain(int argc, char **argv)
   // check countinue (cont = 'C')/win (cont = 'X')/lose (cont = 'O')
   char cont;
   cont = 'C';
-  cprintf("Single player Tic-Tac-Toe\n");
+  // cprintf("Single player Tic-Tac-Toe\n");
+  cprintf("%m%s\n", 0x0400, "red ttt");
   init_board();
   while (cont == 'C') {
     // display playboard
@@ -160,7 +161,9 @@ umain(int argc, char **argv)
   }
 
   if (cont == 'X') {
-    cprintf("You win!\n");
+    cprintf("oh no\n");
+    cprintf("%m%s\n", 0x0200, "You win!");
+    //cprintf("You win!\n");
   } else {
     cprintf("You lose!\n");
   }
