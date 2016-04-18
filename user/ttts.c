@@ -213,7 +213,9 @@ play_game(int sock) {
   char msg2[BUFFSIZE] = "You lose!\n";
   //initialize board
 	init_board();
-  
+  cprintf("Welcome to Tic Tac Toe\n");
+  fprintf(1, "Welcome to Tic Tac Toe!\n");
+  fprintf(1, "Enter the 'X' or '0' \n");
   //receive client's symbol
 	if ((received = read(sock, buffer, BUFFSIZE)) < 0)
 		die("Failed to receive initial bytes from client");
@@ -223,7 +225,7 @@ play_game(int sock) {
   while(received > 0 && cont == 'C') {
     //display board on both side
 		display_board();
-    fprintf(1, "waiting for server \n");
+    fprintf(1, "waiting for server player..... \n");
     //display_client(sock);
     //server go
 		if (client_symbol == 'X')
@@ -236,7 +238,7 @@ play_game(int sock) {
     //display board to both side
     display_board();
     //display_client(sock);
-	  cprintf("waiting for client\n");
+	  cprintf("waiting for client player.....\n");
     //client go
 	  client_move(client_symbol, sock);
     //update continue
