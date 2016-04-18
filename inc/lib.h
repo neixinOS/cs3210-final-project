@@ -52,6 +52,7 @@ char*   readline(const char *buf);
 
 // syscall.c
 void    sys_cputs(const char *string, size_t len);
+int     sys_vcprintf(const char *fmt, va_list ap);
 int     sys_cgetc(void);
 envid_t sys_getenvid(void);
 int sys_env_destroy(envid_t);

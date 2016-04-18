@@ -101,7 +101,7 @@ vprintfmt(void (*putch)(int, void*), void *putdat, const char *fmt, va_list ap)
   while (1) {
     while ((ch = *(unsigned char*)fmt++) != '%') {
       if (ch == '\0') {
-	csa = 0x0700;
+        csa = 0x0700;
         return;
       }
       putch(ch, putdat);
@@ -246,8 +246,7 @@ number:
       break;
     
     case 'm':
-      num = getint(&ap, lflag);
-      csa = num;
+      csa = getint(&ap, lflag);
       break;
 
     // unrecognized escape sequence - just print it literally

@@ -44,6 +44,12 @@ sys_cputs(const char *s, size_t len)
 }
 
 int
+sys_vcprintf(const char *fmt, va_list ap)
+{
+  return syscall(SYS_vcprintf, 0, (uint32_t)fmt, (uint32_t)ap, 0, 0, 0);
+}
+
+int
 sys_cgetc(void)
 {
   return syscall(SYS_cgetc, 0, 0, 0, 0, 0, 0);

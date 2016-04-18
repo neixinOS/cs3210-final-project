@@ -31,6 +31,14 @@ sys_cputs(const char *s, size_t len)
   cprintf("%.*s", len, s);
 }
 
+static int
+sys_vcprintf(const char *fmt, va_list ap) {
+  uint32_t len;
+  for (len = 0; fmt[len] != '\0'; ++len);
+  user_mem_assert(curenv , (void *)fmt, len, PTE_U);
+  return vcprintf(fmt, ap);
+}
+
 // Read a character from the system console without blocking.
 // Returns the character, or 0 if there is no input waiting.
 static int
@@ -778,6 +786,8 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
     case SYS_cputs:
       sys_cputs((char *)a1, a2);
       return 0;
+    case SYS_vcprintf:
+      return sys_vcprintf((const char*)a1, (va_list)a2);
     case SYS_cgetc:
       return sys_cgetc();
       //return 0;

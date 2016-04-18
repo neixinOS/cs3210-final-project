@@ -23,7 +23,7 @@ struct printbuf {
 };
 
 
-static void
+static void //not needed any more
 putch(int ch, struct printbuf *b)
 {
   b->buf[b->idx++] = ch;
@@ -37,14 +37,8 @@ putch(int ch, struct printbuf *b)
 int
 vcprintf(const char *fmt, va_list ap)
 {
-  struct printbuf b;
-
-  b.idx = 0;
-  b.cnt = 0;
-  vprintfmt((void*)putch, &b, fmt, ap);
-  sys_cputs(b.buf, b.idx);
-
-  return b.cnt;
+  // call the new system call instead
+  return sys_vcprintf(fmt, ap);
 }
 
 int
