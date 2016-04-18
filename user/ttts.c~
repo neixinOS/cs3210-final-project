@@ -1,7 +1,6 @@
 #include <inc/lib.h>
 #include <lwip/sockets.h>
 #include <lwip/inet.h>
-
 #define PORT 7
 
 #define BUFFSIZE 32
@@ -15,6 +14,7 @@ die(char *m)
   cprintf("%s\n", m);
   exit();
 }
+
 
 void init_board(void)
 {
@@ -66,47 +66,51 @@ display_board()
   int i;
   
   for (i = 0; i < 3; i++) {
+    fprintf(1," %c | %c | %c ", board[i][0], board[i][1], board[i][2]);
     cprintf(" %c | %c | %c ", board[i][0], board[i][1], board[i][2]);
+
     if (i != 2) {
+      fprintf(1,"\n---|---|---\n");
       cprintf("\n---|---|---\n");
     }
   }
+  fprintf(1,"\n");
   cprintf("\n");
 }
 
-void
-display_client(int sock)
-{
-  // int i;
-  // char buffer[BUFFSIZE];
-  // for (i = 0; i < 3; i++) {
-  //   buffer = buffer + board[i][0] + ' | ' + board[i][1] + ' | ' + board[i][2] + ' ';
-  //   if (i != 2) {
-  //     buffer = buffer + "\n---|---|---\n";
-  //   }
-  // }
-  // buffer = buffer + "\n";
-  // return buffer;
-  int i;
-  char temp[GAMEBOARDSIZE];
-  char buffer[GAMEBOARDSIZE];
-  char s = 'E';
-  char flag1[50] = " | ";
-  char flag2[50] = "\n---|---|---\n";
-  char flag3[50] = "\n";
-  char *ret;
-  for (i = 0; i < 3; i++) {
-    snprintf(temp, GAMEBOARDSIZE, " %c%s%c%s%c ", board[i][0],flag1, board[i][1],flag1,board[i][2]);
-    strcat(buffer,temp);
-    if (i != 2) {
-      strcat(buffer,"\n---|---|---\n");
-    }
-  }
-  strcat(buffer, "\n");
-  write(sock, buffer, GAMEBOARDSIZE);
-  //cprintf("%s", buffer);
-  // buffer = buffer + "\n";
-}
+// void
+// display_client(int sock)
+// {
+//   // int i;
+//   // char buffer[BUFFSIZE];
+//   // for (i = 0; i < 3; i++) {
+//   //   buffer = buffer + board[i][0] + ' | ' + board[i][1] + ' | ' + board[i][2] + ' ';
+//   //   if (i != 2) {
+//   //     buffer = buffer + "\n---|---|---\n";
+//   //   }
+//   // }
+//   // buffer = buffer + "\n";
+//   // return buffer;
+//   int i;
+//   char temp[GAMEBOARDSIZE];
+//   char buff[GAMEBOARDSIZE];
+//   char s = 'E';
+//   char flag1[50] = " | ";
+//   char *ret;
+//   for (i = 0; i < 3; i++) {
+//     snprintf(temp, GAMEBOARDSIZE, " %c%s%c%s%c ", board[i][0],flag1, board[i][1],flag1,board[i][2]);
+//     strcat(buff,temp);
+//     if (i != 2) {
+//       strcat(buff,"\n---|---|---\n");
+//     }
+//   }
+//   strcat(buff, "\n");
+
+//   cprintf("%s", buff);
+//   write(sock, buff, sizeof(buff));
+//   //cprintf("%s", buffer);
+//   // buffer = buffer + "\n";
+// }
 
 int check_available(int row, int column)
 {
@@ -198,7 +202,6 @@ void server_move(char symbol)
 }
 
 
-
 void 
 play_game(int sock) {
 	char buffer[BUFFSIZE];
@@ -210,16 +213,20 @@ play_game(int sock) {
   char msg2[BUFFSIZE] = "You lose!\n";
   //initialize board
 	init_board();
-  
+  cprintf("Welcome to Tic Tac Toe\n");
+  fprintf(1, "Welcome to Tic Tac Toe!\n");
+  fprintf(1, "Enter the 'X' or '0' \n");
   //receive client's symbol
 	if ((received = read(sock, buffer, BUFFSIZE)) < 0)
 		die("Failed to receive initial bytes from client");
 	client_symbol = buffer[0];
 	
+
   while(received > 0 && cont == 'C') {
     //display board on both side
 		display_board();
-    display_client(sock);
+    fprintf(1, "waiting for server player..... \n");
+    //display_client(sock);
     //server go
 		if (client_symbol == 'X')
 			server_move('0');
@@ -230,8 +237,8 @@ play_game(int sock) {
       break;
     //display board to both side
     display_board();
-    display_client(sock);
-	cprintf("waiting for client\n");
+    //display_client(sock);
+	  cprintf("waiting for client player.....\n");
     //client go
 	  client_move(client_symbol, sock);
     //update continue
@@ -247,7 +254,7 @@ play_game(int sock) {
   }
 
 	display_board();
-  display_client(sock);
+  //display_client(sock);
 
 	close(sock);
 }
