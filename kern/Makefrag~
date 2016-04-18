@@ -119,6 +119,7 @@ KERN_BINFILES +=	user/usermmap
 
 # Binary files for ttt
 KERN_BINFILES +=	user/ttt
+KERN_BINFILES +=    user/ttts
 
 
 KERN_OBJFILES := $(patsubst %.c, $(OBJDIR)/%.o, $(KERN_SRCFILES))

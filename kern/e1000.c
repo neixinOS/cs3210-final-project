@@ -170,7 +170,7 @@ e1000_pkt_receive(char *data) {
   idx = (rdt + 1) % E1000_RCVDESC;
   
   if (rcv_desc_array[idx].status & E1000_RXD_STAT_DD) {
-    cprintf("in pkt receive\n");
+    //cprintf("in pkt receive\n");
     if (!(rcv_desc_array[idx].status & E1000_RXD_STAT_EOP)) {
       panic("Don't allow jumbo frames!\n");
     }

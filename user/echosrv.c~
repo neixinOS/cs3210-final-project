@@ -29,7 +29,7 @@ handle_client(int sock)
     // Send back received data
     if (write(sock, buffer, received) != received)
       die("Failed to send bytes to client");
-    cprintf("%d\n", received);
+
     // Check for more data
     if ((received = read(sock, buffer, BUFFSIZE)) < 0)
       die("Failed to receive additional bytes from client");

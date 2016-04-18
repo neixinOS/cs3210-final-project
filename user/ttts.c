@@ -1,0 +1,313 @@
+#include <inc/lib.h>
+#include <lwip/sockets.h>
+#include <lwip/inet.h>
+#define PORT 7
+
+#define BUFFSIZE 32
+#define GAMEBOARDSIZE 128
+#define MAXPENDING 5    // Max connection requests
+char board[3][3];
+char client_symbol;
+static void
+die(char *m)
+{
+  cprintf("%s\n", m);
+  exit();
+}
+
+
+void init_board(void)
+{
+  board[0][0] = '1';
+  board[0][1] = '2';
+  board[0][2] = '3';
+  board[1][0] = '4';
+  board[1][1] = '5';
+  board[1][2] = '6';
+  board[2][0] = '7';
+  board[2][1] = '8';
+  board[2][2] = '9';
+}
+
+char check(void)
+{
+  int i;
+
+  for (i = 0; i < 3; i++) {
+    if ((board[i][0] == board[i][1]) && (board[i][0] == board[i][2])) {
+      return board[i][0];
+    }
+  }
+
+  for (i = 0; i < 3; i++) {
+    if ((board[0][i] == board[1][i]) && (board[0][i] == board[2][i])) {
+      return board[0][i];
+    }
+  }
+
+  for (i = 0; i < 3; i++) {
+    if ((board[0][0] == board[1][1]) && (board[0][0] == board[2][2])) {
+      return board[1][1];
+    }
+  }
+
+  for (i = 0; i < 3; i++) {
+    if ((board[0][2] == board[1][1]) && (board[2][0] == board[0][2])) {
+      return board[1][1];
+    }
+  }
+
+  return 'C';
+}
+
+void
+display_board()
+{
+  int i;
+  
+  for (i = 0; i < 3; i++) {
+    fprintf(1," %c | %c | %c ", board[i][0], board[i][1], board[i][2]);
+    cprintf(" %c | %c | %c ", board[i][0], board[i][1], board[i][2]);
+
+    if (i != 2) {
+      fprintf(1,"\n---|---|---\n");
+      cprintf("\n---|---|---\n");
+    }
+  }
+  fprintf(1,"\n");
+  cprintf("\n");
+}
+
+// void
+// display_client(int sock)
+// {
+//   // int i;
+//   // char buffer[BUFFSIZE];
+//   // for (i = 0; i < 3; i++) {
+//   //   buffer = buffer + board[i][0] + ' | ' + board[i][1] + ' | ' + board[i][2] + ' ';
+//   //   if (i != 2) {
+//   //     buffer = buffer + "\n---|---|---\n";
+//   //   }
+//   // }
+//   // buffer = buffer + "\n";
+//   // return buffer;
+//   int i;
+//   char temp[GAMEBOARDSIZE];
+//   char buff[GAMEBOARDSIZE];
+//   char s = 'E';
+//   char flag1[50] = " | ";
+//   char *ret;
+//   for (i = 0; i < 3; i++) {
+//     snprintf(temp, GAMEBOARDSIZE, " %c%s%c%s%c ", board[i][0],flag1, board[i][1],flag1,board[i][2]);
+//     strcat(buff,temp);
+//     if (i != 2) {
+//       strcat(buff,"\n---|---|---\n");
+//     }
+//   }
+//   strcat(buff, "\n");
+
+//   cprintf("%s", buff);
+//   write(sock, buff, sizeof(buff));
+//   //cprintf("%s", buffer);
+//   // buffer = buffer + "\n";
+// }
+
+int check_available(int row, int column)
+{
+  int check = board[row][column] - '0';
+  if ((check >= 1) && (check <= 9))
+    return 1;
+  return -1;
+
+}
+void client_move(char symbol, int sock)
+{
+  int x;
+  int row, col;
+  char buffer[BUFFSIZE];
+  int received = -1;
+  char msg[BUFFSIZE] = "Client: Enter your move: \n";
+  //ask client to move
+  write(sock, msg, sizeof(msg));
+  int r;
+  r = 1;
+  while (r == 1) {
+    if ((received = read(sock, buffer, BUFFSIZE)) < 0)
+      die("Failed to receive initial bytes from client");
+    else 
+      r =0;
+  }
+  x = buffer[0] - '0';
+  if ((x < 1) || (x > 9)) {
+    cprintf("Invalid move, try again.\n");
+    client_move(symbol, sock);
+  } else {
+    if (x <= 3) {
+      row = 0;
+      col = x - 1;
+    } else if (x <= 6) {
+      row = 1;
+      col = x - 4;
+    } else {
+      row = 2;
+      col = x - 7;
+    }
+    if(check_available(row, col) < 0){
+      cprintf("Invalid move, try again.\n");
+      client_move(symbol, sock);
+    }else {
+      board[row][col] = symbol;
+    }
+  }
+
+}
+void server_move(char symbol)
+{
+  int x;
+  char *buf;
+  int row, col;
+  cprintf("Server1: Enter your move: \n");
+  int read;
+  read = 1;
+  while (read == 1) {
+    buf = readline("Server2: Enter your move: \n");
+    if (buf != NULL) {
+      read = 0;
+    }
+  }
+  //scanf("%d", &x);
+  x = *buf - '0';
+  if ((x < 1) || (x > 9)) {
+    cprintf("Invalid move, try again.\n");
+    server_move(symbol);
+  } else {
+
+    if (x <= 3) {
+      row = 0;
+      col = x - 1;
+    } else if (x <= 6) {
+      row = 1;
+      col = x - 4;
+    } else {
+      row = 2;
+      col = x - 7;
+    }
+    if(check_available(row, col) < 0){
+      cprintf("Invalid move, try again.\n");
+      server_move(symbol);
+    }else {
+      board[row][col] = symbol;
+    }
+  }
+}
+
+
+void 
+play_game(int sock) {
+	char buffer[BUFFSIZE];
+  int received = -1;
+	char client_board[GAMEBOARDSIZE];
+	char cont;
+  cont = 'C';
+  char msg1[BUFFSIZE] = "You win!\n";
+  char msg2[BUFFSIZE] = "You lose!\n";
+  //initialize board
+	init_board();
+  
+  //receive client's symbol
+	if ((received = read(sock, buffer, BUFFSIZE)) < 0)
+		die("Failed to receive initial bytes from client");
+	client_symbol = buffer[0];
+	
+
+  while(received > 0 && cont == 'C') {
+    //display board on both side
+		display_board();
+    fprintf(1, "waiting for server \n");
+    //display_client(sock);
+    //server go
+		if (client_symbol == 'X')
+			server_move('0');
+    else
+      server_move('X');
+    cont = check();
+    if (cont!='C')
+      break;
+    //display board to both side
+    display_board();
+    //display_client(sock);
+	  cprintf("waiting for client\n");
+    //client go
+	  client_move(client_symbol, sock);
+    //update continue
+		cont = check(); /* see if winner */
+	}
+
+	if (cont == client_symbol) {
+		write(sock, msg1, BUFFSIZE);
+		cprintf("You lose!\n");
+  } else {
+    cprintf("You Win!\n");
+		write(sock, msg2, BUFFSIZE);
+  }
+
+	display_board();
+  //display_client(sock);
+
+	close(sock);
+}
+
+
+
+
+
+
+
+
+void
+umain(int argc, char **argv)
+{
+  int serversock, clientsock;
+  struct sockaddr_in echoserver, echoclient;
+  char buffer[BUFFSIZE];
+  unsigned int echolen;
+  int received = 0;
+  char board[3][3];
+
+  // Create the TCP socket
+  if ((serversock = socket(PF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0)
+    die("Failed to create socket");
+
+  cprintf("opened socket\n");
+
+  // Construct the server sockaddr_in structure
+  memset(&echoserver, 0, sizeof(echoserver));             // Clear struct
+  echoserver.sin_family = AF_INET;                        // Internet/IP
+  echoserver.sin_addr.s_addr = htonl(INADDR_ANY);         // IP address
+  echoserver.sin_port = htons(PORT);                      // server port
+
+  cprintf("trying to bind\n");
+
+  // Bind the server socket
+  if (bind(serversock, (struct sockaddr *)&echoserver,
+           sizeof(echoserver)) < 0)
+    die("Failed to bind the server socket");
+
+  // Listen on the server socket
+  if (listen(serversock, MAXPENDING) < 0)
+    die("Failed to listen on server socket");
+
+  cprintf("bound\n");
+
+  // Run until canceled
+  while (1) {
+    unsigned int clientlen = sizeof(echoclient);
+    // Wait for client connection
+    if ((clientsock = accept(serversock, (struct sockaddr *)&echoclient,
+                  &clientlen)) < 0)
+      die("Failed to accept client connection");
+    cprintf("Client connected: %s\n", inet_ntoa(echoclient.sin_addr));
+    play_game(clientsock);
+  }
+  close(serversock);
+}

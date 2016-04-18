@@ -1,6 +1,6 @@
-
 #include <inc/lib.h>
 #include <inc/x86.h>
+
 char board[3][3];
 void init_board(void);
 char check(void);
@@ -169,4 +169,3 @@ umain(int argc, char **argv)
   //init_board();
   
 }
-

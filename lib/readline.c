@@ -14,16 +14,16 @@ readline(const char *prompt)
     cprintf("%s", prompt);
 #else
   if (prompt != NULL)
-    fprintf(1, "%s", prompt);
+    //fprintf(1, "%s", prompt);
 #endif
 
   i = 0;
-  echoing = iscons(0);
+  echoing = 1;
   while (1) {
     c = getchar();
     if (c < 0) {
-      if (c != -E_EOF)
-        cprintf("read error: %e\n", c);
+      //if (c != -E_EOF)
+      cprintf("read error: %e\n", c);
       return NULL;
     } else if ((c == '\b' || c == '\x7f') && i > 0) {
       if (echoing)
