@@ -11,7 +11,7 @@ umain(int argc, char **argv)
 	cprintf("********************************\n");
 	cprintf("Start Initialize the RAID Disk\n");
 	cprintf("\n");
-	sys_raid2_init();
+	sys_raid_init();
 	int i;
 	int j = 0;
 	// for (i = 0; i < 100; i++) 
@@ -22,14 +22,14 @@ umain(int argc, char **argv)
 	}
 	cprintf("Saving contents on RAID Disk\n");
 	cprintf("\n");
-	sys_raid2_add(j, a);
-	// sys_raid2_change(1, 1, 4);
-	// sys_raid2_change(0, 0, 1);
+	sys_raid_add(j, a);
+	// sys_raid_change(1, 1, 4);
+	// sys_raid_change(0, 0, 1);
 	
-	// sys_raid2_change(1, 24, 4);
+	// sys_raid_change(1, 24, 4);
 	int sectorNum = 12;
 	assert(sectorNum < j);
-	sys_raid2_change(1, sectorNum, 91);
-	sys_raid2_check();
+	sys_raid_change(1, sectorNum, 91);
+	sys_raid_check();
 	return;
 }

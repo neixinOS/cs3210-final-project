@@ -80,10 +80,10 @@ unsigned int sys_time_msec(void);
 
 
 // raid
-int sys_raid2_init(void);
-int sys_raid2_add(int num, int* a);
-int sys_raid2_change(int isdisk, int num, int change);
-int sys_raid2_check(void);
+int sys_raid_init(void);
+int sys_raid_add(int num, int* a);
+int sys_raid_change(int isdisk, int num, int change);
+int sys_raid_check(void);
 
 // This must be inlined.  Exercise for reader: why?
 static __inline envid_t __attribute__((always_inline))

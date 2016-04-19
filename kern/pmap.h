@@ -100,10 +100,9 @@ struct My_Disk {
 	int now;
 	int data;
 };
-int nraid2_disks;
-struct My_Disk raid2_disks[100];
-struct My_Disk* origin_raid2_disk[7];
-struct My_Disk* user_raid2_disk[7];
-int now_raid2_add;
-int now_raid2_disk;
-// int nn_add[7]; 
+int nraid_disks;
+struct My_Disk raid_disks[100];
+struct My_Disk* origin_raid_disk[7];
+struct My_Disk* user_raid_disk[7];
+int now_raid_add;
+int now_raid_disk;

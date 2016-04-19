@@ -27,10 +27,10 @@ enum {
   SYS_env_set_divide0_upcall,
   SYS_env_set_illegalop_upcall,
 
-  SYS_raid2_init,
-  SYS_raid2_add,
-  SYS_raid2_change,
-  SYS_raid2_check,
+  SYS_raid_init,
+  SYS_raid_add,
+  SYS_raid_change,
+  SYS_raid_check,
 
   NSYSCALLS
 };

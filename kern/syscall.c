@@ -521,13 +521,7 @@ static void printState() {
   struct My_Disk* cur_disk;
   int i;
   for (i = 0; i < 4; i++) {
-    // user_raid2_disk[i]->next = &raid2_disks[i];
-    // user_raid2_disk[i] = &raid2_disks[now_raid2_disk];
-    // user_raid2_disk[i]->next = NULL;
-    // user_raid2_disk[i]->data = 0;
-    // user_raid2_disk[i]->now = 0;
-    // user_raid2_disk[i]->dirty = false;
-    cur_disk = &raid2_disks[i];
+    cur_disk = &raid_disks[i];
     while (cur_disk != NULL) {
       cprintf("%d", cur_disk->data);
       cur_disk = cur_disk->next;
@@ -537,73 +531,71 @@ static void printState() {
 
 static void disk_alloc() {
   int i;
-  for (i = 0; i < 4; i++, now_raid2_disk++) {
-    user_raid2_disk[i]->next = &raid2_disks[now_raid2_disk];
-    user_raid2_disk[i] = &raid2_disks[now_raid2_disk];
-    user_raid2_disk[i]->next = NULL;
-    user_raid2_disk[i]->data = 0;
-    user_raid2_disk[i]->now = 0;
-    user_raid2_disk[i]->dirty = false;
+  for (i = 0; i < 4; i++, now_raid_disk++) {
+    user_raid_disk[i]->next = &raid_disks[now_raid_disk];
+    user_raid_disk[i] = &raid_disks[now_raid_disk];
+    user_raid_disk[i]->next = NULL;
+    user_raid_disk[i]->data = 0;
+    user_raid_disk[i]->now = 0;
+    user_raid_disk[i]->dirty = false;
   }
-  cprintf("~~~~~~~~~~~~~~~~~~%d~~~~~~~~~~~~~~~~~~~~ Disk alloc\n", now_raid2_disk);
+  cprintf("~~~~~~~~~~~~~~~~~~%d~~~~~~~~~~~~~~~~~~~~ Disk alloc\n", now_raid_disk);
   return;
 }
 
 static void Xor() {
-  cprintf("disk 0 %d\n", user_raid2_disk[0]->data);
-  cprintf("disk 1 %d\n", user_raid2_disk[1]->data);
-  cprintf("disk 2 %d\n", user_raid2_disk[2]->data);
-  user_raid2_disk[3]->data = user_raid2_disk[0]->data ^ user_raid2_disk[1]->data ^ user_raid2_disk[2]->data;
+  cprintf("disk 0 %d\n", user_raid_disk[0]->data);
+  cprintf("disk 1 %d\n", user_raid_disk[1]->data);
+  cprintf("disk 2 %d\n", user_raid_disk[2]->data);
+  user_raid_disk[3]->data = user_raid_disk[0]->data ^ user_raid_disk[1]->data ^ user_raid_disk[2]->data;
 
-  cprintf("   The xor value is %d\n", user_raid2_disk[3]->data);
+  cprintf("   The xor value is %d\n", user_raid_disk[3]->data);
   cprintf("\n");
 
   disk_alloc();
 }
 
-static void sys_raid2_init() {
-  // cprintf("From %d to initialization!\n", now_raid2_disk);
+static void sys_raid_init() {
   int i;
-  for (i = 0; i < 4; i++, now_raid2_disk++) {
-    user_raid2_disk[i] = &raid2_disks[now_raid2_disk];
-    origin_raid2_disk[i] = &raid2_disks[now_raid2_disk];
-    user_raid2_disk[i]->next = NULL;
-    user_raid2_disk[i]->data = 0;
-    user_raid2_disk[i]->now = 0;
-    user_raid2_disk[i]->dirty = false;
+  for (i = 0; i < 4; i++, now_raid_disk++) {
+    user_raid_disk[i] = &raid_disks[now_raid_disk];
+    origin_raid_disk[i] = &raid_disks[now_raid_disk];
+    user_raid_disk[i]->next = NULL;
+    user_raid_disk[i]->data = 0;
+    user_raid_disk[i]->now = 0;
+    user_raid_disk[i]->dirty = false;
   }
-  cprintf("~~~~~~~~~~~~~~~~~~%d~~~~~~~~~~~~~~~~~~~~ Disk alloc\n", now_raid2_disk);
-  now_raid2_add = 0;
+  cprintf("~~~~~~~~~~~~~~~~~~%d~~~~~~~~~~~~~~~~~~~~ Disk alloc\n", now_raid_disk);
+  now_raid_add = 0;
   return;
 }
 
-static void sys_raid2_add(int num, uint32_t* a) {
-
+static void sys_raid_add(int num, uint32_t* a) {
 
   int i, count;
   count = num;
   for (i = 0; i < num; i++) {
     // cprintf("Add %d to disk\n", a[i]);
     int tmp = a[i];
-    cprintf("\tAdd %d to disk %d\n", tmp, now_raid2_add);
+    cprintf("\tAdd %d to disk %d\n", tmp, now_raid_add);
     if (tmp)
     {
-      user_raid2_disk[now_raid2_add]->data = tmp;
+      user_raid_disk[now_raid_add]->data = tmp;
     } else {
-      user_raid2_disk[now_raid2_add]->data = 0;
+      user_raid_disk[now_raid_add]->data = 0;
     }
-    now_raid2_add++;
+    now_raid_add++;
     count--;
     if (count == 0) {
-      // if (now_raid2_add != 3)
+      // if (now_raid_add != 3)
       // {
       // }
       cprintf("Allocate for the last disk\n");
       Xor();
       break;
     }
-    if (now_raid2_add == 3) {
-      now_raid2_add = 0;
+    if (now_raid_add == 3) {
+      now_raid_add = 0;
       cprintf("Write to parity disk\n");
       Xor();
     }
@@ -611,29 +603,29 @@ static void sys_raid2_add(int num, uint32_t* a) {
 
 }
 
-static void sys_raid2_change(int onDisk, int num, int change) {
+static void sys_raid_change(int onDisk, int num, int change) {
   int count = 0;
   struct My_Disk* cur_disk;
 
   // cprintf("\n");
   // cprintf("Before the change\n");
 
-  // while (raid2_disks[count].next != NULL) {
-  //   cur_disk = &raid2_disks[count];
+  // while (raid_disks[count].next != NULL) {
+  //   cur_disk = &raid_disks[count];
   //   cprintf("Sector %d\n", count);
   //   cprintf("%d        ", cur_disk->data);
   //   cprintf("%d\n", cur_disk->dirty);
   //   count++;
   // }
 
-  raid2_disks[num].dirty = true;
-  raid2_disks[num].data = change;
+  raid_disks[num].dirty = true;
+  raid_disks[num].data = change;
 
   cprintf("\n");
   cprintf("After We Intentionally corrupt:\n");
   char c;
-  while (raid2_disks[count].next != NULL) {
-    cur_disk = &raid2_disks[count];
+  while (raid_disks[count].next != NULL) {
+    cur_disk = &raid_disks[count];
     c = cur_disk->data;
     if (count == 0 || (count - 3) % 4 != 0)
     {
@@ -647,8 +639,8 @@ static void sys_raid2_change(int onDisk, int num, int change) {
   // if (is_disk) {
   //   // num is the exact place in the physical memory
   //   // ie, need to be 0, 1, 2, (no 3), 4, 5, 6, (no 7)
-  //   raid2_disks[num].dirty = true;
-  //   raid2_disks[num].data = change;
+  //   raid_disks[num].dirty = true;
+  //   raid_disks[num].data = change;
   //   return;
   // }
 
@@ -658,7 +650,7 @@ static void sys_raid2_change(int onDisk, int num, int change) {
 
   // int i;
   // for (i = 0; i < 4; i++) 
-  //   tmp_disk[i] = origin_raid2_disk[i];
+  //   tmp_disk[i] = origin_raid_disk[i];
   // for (;num > 32 * 4;) {
   //   num -= 32 * 4;
   //   for (i = 0; i < 4; i++)
@@ -675,14 +667,14 @@ static void sys_raid2_change(int onDisk, int num, int change) {
 
 struct My_Disk* tmp_disk[4];
 
-static void sys_raid2_check() {
+static void sys_raid_check() {
   cprintf("\n");
   cprintf("Check for RAID Disk integrity\n");
   int sum_d = 0;
   int i;
   int j;
   for (i = 0; i < 4; i++) {
-    tmp_disk[i] = origin_raid2_disk[i];
+    tmp_disk[i] = origin_raid_disk[i];
     if (tmp_disk[i]->dirty) sum_d++;
   }
   int now_num = 0;
@@ -739,7 +731,7 @@ static void sys_raid2_check() {
     //   cprintf("%d", t);
     // }
     // cprintf("\n");
-//    check_raid2_disk();
+//    check_raid_disk();
     sum_d = 0;
     for (i = 0; i < 4; i++) {
       if (tmp_disk[i]->next == NULL) {
@@ -748,8 +740,8 @@ static void sys_raid2_check() {
         int count = 0;
         struct My_Disk* cur_disk;
         char c;
-        while (raid2_disks[count].next != NULL) {
-          cur_disk = &raid2_disks[count];
+        while (raid_disks[count].next != NULL) {
+          cur_disk = &raid_disks[count];
           c = cur_disk->data;
           if (count == 0 || (count - 3) % 4 != 0)
           {
@@ -830,17 +822,17 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
       return sys_net_pkt_transmit((void *) a1, (size_t) a2);
     case SYS_net_try_receive:
       return sys_net_try_receive((char *) a1, (int *) a2);
-    case SYS_raid2_init :
-      sys_raid2_init();
+    case SYS_raid_init :
+      sys_raid_init();
       goto succeed;
-    case SYS_raid2_add :
-      sys_raid2_add(a1, (uint32_t*) a2);
+    case SYS_raid_add :
+      sys_raid_add(a1, (uint32_t*) a2);
       goto succeed;
-    case SYS_raid2_change :
-      sys_raid2_change(a1, a2, a3);
+    case SYS_raid_change :
+      sys_raid_change(a1, a2, a3);
       goto succeed;
-    case SYS_raid2_check :
-      sys_raid2_check();
+    case SYS_raid_check :
+      sys_raid_check();
       goto succeed;
     default:
       return -E_INVAL;
