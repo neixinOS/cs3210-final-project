@@ -163,9 +163,9 @@ sys_net_try_receive(char *data, int *len)
 
 // raid
 int 
-sys_raid_init(void) 
+sys_raid_init(int* a) 
 {
-  return syscall(SYS_raid_init, 0, 0, 0, 0, 0, 0);
+  return syscall(SYS_raid_init, 0, (uint32_t) a, 0, 0, 0, 0);
 }
 int sys_raid_add(int num, int* a) 
 {

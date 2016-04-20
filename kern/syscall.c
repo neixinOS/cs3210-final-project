@@ -555,19 +555,52 @@ static void Xor() {
   disk_alloc();
 }
 
-static void sys_raid_init() {
-  int i;
-  for (i = 0; i < 4; i++, now_raid_disk++) {
-    user_raid_disk[i] = &raid_disks[now_raid_disk];
-    origin_raid_disk[i] = &raid_disks[now_raid_disk];
-    user_raid_disk[i]->next = NULL;
-    user_raid_disk[i]->data = 0;
-    user_raid_disk[i]->now = 0;
-    user_raid_disk[i]->dirty = false;
+int gg[300];
+int umark = 0;
+
+static void sys_raid_init(uint32_t* a) {
+  
+  if (a == NULL)
+  {
+    // cprintf("piece of mess!!!!!!!!!\n");
+    // cprintf("%d\n", umark);
+    int i;
+    for (i = 0; i < 4; i++, now_raid_disk++) {
+      user_raid_disk[i] = &raid_disks[now_raid_disk];
+      origin_raid_disk[i] = &raid_disks[now_raid_disk];
+      user_raid_disk[i]->next = NULL;
+      user_raid_disk[i]->data = 0;
+      user_raid_disk[i]->now = 0;
+      user_raid_disk[i]->dirty = false;
+    }
+    cprintf("~~~~~~~~~~~~~~~~~~%d~~~~~~~~~~~~~~~~~~~~ Disk alloc\n", now_raid_disk);
+    now_raid_add = 0;
+    return;
+  } else {
+    int j;
+    char c;
+    // cprintf("%d\n", sizeof(a) / sizeof(int));
+    for (j = 0; j < 12; j++) {
+      gg[umark] = a[j];
+      c = a[j];
+      cprintf("%c", c);
+      umark++;
+    }
+    cprintf("\n");
+    //cprintf("%d\n", umark);
   }
-  cprintf("~~~~~~~~~~~~~~~~~~%d~~~~~~~~~~~~~~~~~~~~ Disk alloc\n", now_raid_disk);
-  now_raid_add = 0;
-  return;
+  // int i;
+  // for (i = 0; i < 4; i++, now_raid_disk++) {
+  //   user_raid_disk[i] = &raid_disks[now_raid_disk];
+  //   origin_raid_disk[i] = &raid_disks[now_raid_disk];
+  //   user_raid_disk[i]->next = NULL;
+  //   user_raid_disk[i]->data = 0;
+  //   user_raid_disk[i]->now = 0;
+  //   user_raid_disk[i]->dirty = false;
+  // }
+  // cprintf("~~~~~~~~~~~~~~~~~~%d~~~~~~~~~~~~~~~~~~~~ Disk alloc\n", now_raid_disk);
+  // now_raid_add = 0;
+  // return;
 }
 
 static void sys_raid_add(int num, uint32_t* a) {
@@ -576,6 +609,7 @@ static void sys_raid_add(int num, uint32_t* a) {
   count = num;
   for (i = 0; i < num; i++) {
     // cprintf("Add %d to disk\n", a[i]);
+
     int tmp = a[i];
     cprintf("\tAdd %d to disk %d\n", tmp, now_raid_add);
     if (tmp)
@@ -599,7 +633,36 @@ static void sys_raid_add(int num, uint32_t* a) {
       cprintf("Write to parity disk\n");
       Xor();
     }
+
   }
+
+  // count = umark;
+  // for (i = 0; i < umark; ++i)
+  // {
+  //   int tmp = gg[i];
+  //   cprintf("\tAdd %d to disk %d\n", tmp, now_raid_add);
+  //   if (tmp)
+  //   {
+  //     user_raid_disk[now_raid_add]->data = tmp;
+  //   } else {
+  //     user_raid_disk[now_raid_add]->data = 0;
+  //   }
+  //   now_raid_add++;
+  //   count--;
+  //   if (count == 0) {
+  //     // if (now_raid_add != 3)
+  //     // {
+  //     // }
+  //     cprintf("Allocate for the last disk\n");
+  //     Xor();
+  //     break;
+  //   }
+  //   if (now_raid_add == 3) {
+  //     now_raid_add = 0;
+  //     cprintf("Write to parity disk\n");
+  //     Xor();
+  //   }
+  // }
 
 }
 
@@ -823,7 +886,7 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
     case SYS_net_try_receive:
       return sys_net_try_receive((char *) a1, (int *) a2);
     case SYS_raid_init :
-      sys_raid_init();
+      sys_raid_init((uint32_t*) a1);
       goto succeed;
     case SYS_raid_add :
       sys_raid_add(a1, (uint32_t*) a2);

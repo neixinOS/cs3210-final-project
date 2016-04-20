@@ -80,7 +80,7 @@ unsigned int sys_time_msec(void);
 
 
 // raid
-int sys_raid_init(void);
+int sys_raid_init(int* a);
 int sys_raid_add(int num, int* a);
 int sys_raid_change(int isdisk, int num, int change);
 int sys_raid_check(void);

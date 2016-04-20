@@ -259,14 +259,47 @@ play_game(int sock) {
     //update continue
 		cont = check(); /* see if winner */
 	}
+
+  int a[50];
+  char *win = "Server: Win!\n";
+  char *lose = "Server: Lose\n";
+  char *tie = "Server: TIE!\n";
+
+  int j = 0;
+
   if (cont == 'T') {
     fprintf(1, "TIE!!!!\n");
     cprintf("TIE!!!!!\n");
+
+    while (tie[j]) {
+      a[j] = tie[j];
+      j++;
+    }
+    j = 0;
+    sys_raid_init(a);
+
   } else if (cont == client_symbol) {
 		write(sock, msg1, BUFFSIZE);
 		cprintf("You lose!\n");
+
+    while (lose[j]) {
+      a[j] = lose[j];
+      j++;
+    }
+    j = 0;
+    sys_raid_init(a);
+
   } else {
     cprintf("You Win!\n");
+
+    while (win[j]) {
+      a[j] = win[j];
+      j++;
+    }
+    j = 0;
+    cprintf("%d\n", sizeof(a) / sizeof(int));
+    sys_raid_init(a);
+
 		write(sock, msg2, BUFFSIZE);
   }
 

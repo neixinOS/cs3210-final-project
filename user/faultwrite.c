@@ -6,16 +6,13 @@ void
 umain(int argc, char **argv)
 {
 	int a[100];
-	char *test = "Hello everyone, my name is Caesar. Nice to meet you!\n";
+	char *test = "Server: Win!\nServer: Lose\nServer: TIE!\n";
 	cprintf("\n");
 	cprintf("********************************\n");
 	cprintf("Start Initialize the RAID Disk\n");
 	cprintf("\n");
-	sys_raid_init();
-	int i;
+	sys_raid_init(NULL);
 	int j = 0;
-	// for (i = 0; i < 100; i++) 
-	// 	a[i] = i;
 	while (test[j]) {
 		a[j] = test[j];
 		j++;
@@ -29,7 +26,14 @@ umain(int argc, char **argv)
 	// sys_raid_change(1, 24, 4);
 	int sectorNum = 12;
 	assert(sectorNum < j);
-	sys_raid_change(1, sectorNum, 91);
+	sys_raid_change(1, 5, 91);
+	sys_raid_change(1, sectorNum, 42);
+
+	sys_raid_change(1, 22, 36);
+	sys_raid_change(1, 25, 94);
+	sys_raid_change(1, 29, 39);
+	sys_raid_change(1, 34, 64);
+
 	sys_raid_check();
 	return;
 }
