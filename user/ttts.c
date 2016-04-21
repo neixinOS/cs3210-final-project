@@ -172,6 +172,7 @@ void client_move(const char* symbol, int sock)
       client_move(symbol, sock);
     }else {
       board[row][col] = symbol;
+      avail[row][col] = false;
     }
   }
 
