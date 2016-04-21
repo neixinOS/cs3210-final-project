@@ -6,7 +6,10 @@
 #define BUFFSIZE 32
 #define GAMEBOARDSIZE 128
 #define MAXPENDING 5    // Max connection requests
-char board[3][3];
+const char* board[3][3];
+bool avail[3][3];
+const char* X="\033[0;31mX\033[0m";
+const char* O="\033[0;34mO\033[0m";
 char client_symbol;
 static void
 die(char *m)
@@ -18,50 +21,54 @@ die(char *m)
 
 void init_board(void)
 {
-  board[0][0] = '1';
-  board[0][1] = '2';
-  board[0][2] = '3';
-  board[1][0] = '4';
-  board[1][1] = '5';
-  board[1][2] = '6';
-  board[2][0] = '7';
-  board[2][1] = '8';
-  board[2][2] = '9';
+  board[0][0] = "1";
+  board[0][1] = "2";
+  board[0][2] = "3";
+  board[1][0] = "4";
+  board[1][1] = "5";
+  board[1][2] = "6";
+  board[2][0] = "7";
+  board[2][1] = "8";
+  board[2][2] = "9";
+  int i, j;
+  for (i= 0; i < 3; ++i)
+    for (j = 0; j < 3; ++j)
+      avail[i][j] = true;
 }
 int check_available(int row, int column)
 {
-  int check = board[row][column] - '0';
-  if ((check >= 1) && (check <= 9))
-    return 1;
-  return -1;
-
+  return avail[row][column] ? 1 : -1;
 }
 char check(void)
 {
   int i;
   int j;
   int r;
+  //check for the rows
   for (i = 0; i < 3; i++) {
     if ((board[i][0] == board[i][1]) && (board[i][0] == board[i][2])) {
-      return board[i][0];
+      return board[i][0] == X ? 'X' : 'O';
     }
   }
 
+  //check for the columns
   for (i = 0; i < 3; i++) {
     if ((board[0][i] == board[1][i]) && (board[0][i] == board[2][i])) {
-      return board[0][i];
+      return board[0][i] == X ? 'X' : 'O';
     }
   }
 
+  //check for the diagonal
   for (i = 0; i < 3; i++) {
     if ((board[0][0] == board[1][1]) && (board[0][0] == board[2][2])) {
-      return board[1][1];
+      return board[1][1] == X ? 'X' : 'O';
     }
   }
 
+  //check for diagonal
   for (i = 0; i < 3; i++) {
     if ((board[0][2] == board[1][1]) && (board[2][0] == board[0][2])) {
-      return board[1][1];
+      return board[1][1] == X ? 'X' : 'O';
     }
   }
   for(i = 0; i < 3; i++) {
@@ -81,8 +88,8 @@ display_board()
   int i;
   
   for (i = 0; i < 3; i++) {
-    fprintf(1," %c | %c | %c ", board[i][0], board[i][1], board[i][2]);
-    cprintf(" %c | %c | %c ", board[i][0], board[i][1], board[i][2]);
+    fprintf(1," %s | %s | %s ", board[i][0], board[i][1], board[i][2]);
+    cprintf(" %s | %s | %s ", board[i][0], board[i][1], board[i][2]);
 
     if (i != 2) {
       fprintf(1,"\n---|---|---\n");
@@ -128,7 +135,7 @@ display_board()
 // }
 
 
-void client_move(char symbol, int sock)
+void client_move(const char* symbol, int sock)
 {
   int x;
   int row, col;
@@ -169,7 +176,7 @@ void client_move(char symbol, int sock)
   }
 
 }
-void server_move(char symbol)
+void server_move(const char* symbol)
 {
   int x;
   char *buf;
@@ -205,6 +212,7 @@ void server_move(char symbol)
       server_move(symbol);
     }else {
       board[row][col] = symbol;
+      avail[row][col] = false;
     }
   }
 }
@@ -212,24 +220,24 @@ void server_move(char symbol)
 
 void 
 play_game(int sock) {
-	char buffer[BUFFSIZE];
+  char buffer[BUFFSIZE];
   int received = -1;
-	char client_board[GAMEBOARDSIZE];
-	char cont;
+  char client_board[GAMEBOARDSIZE];
+  char cont;
   cont = 'C';
   char msg1[BUFFSIZE] = "You win!\n";
   char msg2[BUFFSIZE] = "You lose!\n";
   //initialize board
-	init_board();
+  init_board();
   cprintf("Welcome to Tic Tac Toe\n");
   fprintf(1, "Welcome to Tic Tac Toe!\n");
-  fprintf(1, "Enter the 'X' or '0' \n");
+  fprintf(1, "Enter the 'X' or 'O' \n");
   //receive client's symbol
-	if ((received = read(sock, buffer, BUFFSIZE)) < 0)
-		die("Failed to receive initial bytes from client");
-	client_symbol = buffer[0];
+  if ((received = read(sock, buffer, BUFFSIZE)) < 0)
+    die("Failed to receive initial bytes from client");
+  client_symbol = buffer[0];
 
-	while(client_symbol != 'X' && client_symbol != 'x' && client_symbol != 'O' && client_symbol != 'o') {
+  while(client_symbol != 'X' && client_symbol != 'O') {
     fprintf(1, "Invalid enter! Enter the 'X' or 'O' \n");
     if ((received = read(sock, buffer, BUFFSIZE)) < 0)
       die("Failed to receive initial bytes from client");
@@ -242,11 +250,11 @@ play_game(int sock) {
     fprintf(1, "waiting for server player..... \n");
     //display_client(sock);
     //server go
-		if (client_symbol == 'X' || client_symbol == 'x'){
+    if (client_symbol == 'X' || client_symbol == 'x'){
       client_symbol = 'X';
-			server_move('O');
+      server_move(O);
     } else
-      server_move('X');
+      server_move(X);
     cont = check();
     if (cont!='C')
       break;
@@ -255,7 +263,7 @@ play_game(int sock) {
     //display_client(sock);
 	  cprintf("waiting for client player.....\n");
     //client go
-	  client_move(client_symbol, sock);
+	  client_move(client_symbol == 'X' ? X : O, sock);
     //update continue
 		cont = check(); /* see if winner */
 	}
