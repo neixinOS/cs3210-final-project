@@ -1,0 +1,175 @@
+To add a notion of time for our kernel, first in kern/trap.c, we add a call to time_tick for every clock interrupt,  
+
+static void
+trap_dispatch(struct Trapframe *tf)
+{
+  …
+  // Add time tick increment to clock interrupts.
+  // Be careful! In multiprocessors, clock interrupts are
+  // triggered on every CPU.
+  // LAB 6: Your code here.
+  if (tf->tf_trapno == IRQ_OFFSET + IRQ_TIMER) {	       
+    lapic_eoi();
+    if (cpunum() == 0)
+      time_tick();
+    sched_yield();
+    return;
+  }
+  ..
+}
+
+In kern/syscall.c, we implement sys_tim_mesc by adding a call to time_msec() to return the current time and add it to syscall to allow the user space has access to the time.
+
+// Return the current time.
+static int
+sys_time_msec(void)
+{
+  // LAB 6: Your code here.
+  // panic("sys_time_msec not implemented");
+  return time_msec();
+}
+
+
+// Dispatches to the correct kernel function, passing the arguments.
+int32_t
+syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
+{
+  switch (syscallno) {
+    …
+    case SYS_time_msec:
+      return sys_time_msec();
+    …
+  }
+}
+
+We implement an attach function to initialize the E1000 in e1000.c
+int
+e1000_pci_attach(struct pci_func *pcif) {
+
+  // enable PCI device
+  pci_func_enable(pcif);
+}
+
+Add an entry to the pci_attach_vendor array in kern/pci.c to trigger your function if a matching PCI device is found. E1000_VENDORID (0x8086) and E1000_DEVICEID (0x100e) are defined in e1000.h
+// pci_attach_vendor matches the vendor ID and device ID of a PCI device
+struct pci_driver pci_attach_vendor[] = {
+  {E1000_VENDORID, E1000_DEVICEID, &e1000_pci_attach},
+  { 0,      0,      0             },
+};
+
+In attach function, we create a virtual memory mapping for the E1000’s BAR 0 by calling mmio_map_region. volatile uint32_t *e1000 is declared in e1000.h
+int
+e1000_pci_attach(struct pci_func *pcif) {
+  …
+  // create a virtual memory mapping for the E1000’s BAR 0
+  e1000 = (uint32_t *)mmio_map_region(pcif->reg_base[0], pcif->reg_size[0]);
+  // device status register should get 0x80080783
+  assert(e1000[E1000_STATUS] == 0x80080783);
+  …
+}
+
+
+Perform the initialization steps: 
+1: Allocate a region of memory for the transmit descriptor list.
+  memset(tx_desc_array, 0, sizeof(struct tx_desc) * E1000_TXDESC);
+  memset(tx_pkt_bufs, 0, sizeof(struct tx_pkt) * E1000_TXDESC);
+  for (i = 0; i < E1000_TXDESC; i++) {
+    tx_desc_array[i].addr = PADDR(tx_pkt_bufs[i].buf);
+    tx_desc_array[i].status |= E1000_TXD_STAT_DD;
+  }
+
+2: Program the Transmit Descriptor Base Address (TDBAL/TDBAH) register(s) with the address of the region. 
+  e1000[E1000_TDBAL] = PADDR(tx_desc_array);
+  e1000[E1000_TDBAH] = 0x0;
+
+3: Set the Transmit Descriptor Length (TDLEN) register to the size (in bytes) of the descriptor ring. 
+  e1000[E1000_TDLEN] = sizeof(struct tx_desc) * E1000_TXDESC;
+
+4: The Transmit Descriptor Head and Tail (TDH/TDT) registers are initialized (by hardware) to 0b after a power-on or a software initiated Ethernet controller reset. Software should write 0b to both these registers to ensure this. 
+  e1000[E1000_TDH] = 0x0;
+  e1000[E1000_TDT] = 0x0;
+
+5: Initialize the Transmit Control Register (TCTL) for desired operation to include the following: 
+  • Set the Enable(TCTL.EN) bit to 1b for normal operation.
+    e1000[E1000_TCTL] |= E1000_TCTL_EN;   • Set the Pad Short Packets (TCTL.PSP) bit to 1b. 
+    e1000[E1000_TCTL] |= E1000_TCTL_PSP;
+  • Configure the Collision Threshold(TCTL.CT) to the desired value. Ethernet standard is 10h. This setting only has
+meaning in half duplex mode. 
+    e1000[E1000_TCTL] &= ~E1000_TCTL_CT;
+    e1000[E1000_TCTL] |= (0x10) << 4;
+• Configure the Collision Distance (TCTL.COLD) to its expected value. For full duplex operation, this value should be set
+to 40h. For gigabit half duplex, this value should be set to 200h. For 10/100 half duplex, this value should be set to 40h.
+    e1000[E1000_TCTL] &= ~E1000_TCTL_COLD;
+    e1000[E1000_TCTL] |= (0x40) << 12;
+
+6: Program the Transmit IPG (TIPG) register with the following decimal values to get the minimum legal Inter Packet Gap: 
+  e1000[E1000_TIPG] = 0x0;
+  e1000[E1000_TIPG] |= (0x6) << 20; // IPGR2 
+  e1000[E1000_TIPG] |= (0x4) << 10; // IPGR1
+  e1000[E1000_TIPG] |= 0xA; // IPGR 
+We write a function to transmit a packet by checking that the next descriptor is free, copying the packet data into the next descriptor, and updating TDT. Make sure you handle the transmit queue being full. E_PKT_TOO_LONG and E_TC_FULL are added to  Kernel error codes in inc/error.h
+
+int
+e1000_pkt_transmit(char *data, int length)
+{
+  if (length > TX_PKT_SIZE) {
+    return -E_PKT_TOO_LONG;
+  }
+
+  //  transmit a packet by checking that the next descriptor is free
+  uint32_t tdt = e1000[E1000_TDT];
+  if (tx_desc_array[tdt].status & E1000_TXD_STAT_DD) {
+    // copying the packet data into the next descriptor and updating TDT
+    memmove(tx_pkt_bufs[tdt].buf, data, length);
+    tx_desc_array[tdt].length = length;
+    tx_desc_array[tdt].status &= ~E1000_TXD_STAT_DD;
+    tx_desc_array[tdt].cmd |= E1000_TXD_CMD_RS;
+    tx_desc_array[tdt].cmd |= E1000_TXD_CMD_EOP;
+    e1000[E1000_TDT] = (tdt + 1) % E1000_TXDESC;
+  } else { 
+    // handle the transmit queue being full
+    return -E_TX_FULL;
+  }
+  
+  return 0;
+}
+
+
+We add a system call that lets you transmit packets from user space in kern/syscall.c
+static int
+sys_net_pkt_transmit(char *data, int length)
+{
+	if ((uintptr_t)data >= UTOP) {
+		return -E_INVAL;
+	}
+	return e1000_pkt_transmit(data, length);
+}
+
+int32_t
+syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
+{
+  switch (syscallno) {
+    …
+    case SYS_net_pkt_transmit:
+      return sys_net_pkt_transmit((void *) a1, (size_t) a2);
+    case SYS_net_try_receive:
+    ..
+  }
+}
+
+And we implement net/output.c.
+void
+output(envid_t ns_envid)
+{
+  …  
+  int perm;
+  envid_t eid;
+  while(1){
+    // read a packet from the network server
+    if(ipc_recv(&eid, &nsipcbuf, &perm) != NSREQ_OUTPUT) 
+      continue;
+    // send the packet to the device driver
+    while(sys_net_pkt_transmit(nsipcbuf.pkt.jp_data, nsipcbuf.pkt.jp_len) < 0) 
+      sys_yield();
+  }
+}
