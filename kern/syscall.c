@@ -486,6 +486,9 @@ sys_env_set_illegalop_upcall(envid_t envid, void *func)
   return 0;
 }
 
+char *historyRecord = "Server: Win!\nServer: TIE!\n"
+  "Server: Lose!\nServer: Win!\nServer: Lose!\n";
+
 // Return the current time.
 static int
 sys_time_msec(void)
@@ -585,7 +588,7 @@ static void sys_raid_init(uint32_t* a) {
     }
     cprintf("\n");
 
-    cprintf("lettttt seeee what's in the global arr!!!!!\n");
+    cprintf("let see what's in the global arr!!!!!\n");
     for (j = 0; j < umark; j++) {
        c = gg[j];
       cprintf("%c", c);
@@ -642,6 +645,10 @@ static void sys_raid_add(int num, uint32_t* a) {
 
   }
 
+  while (historyRecord[umark]) {
+    gg[umark] = historyRecord[umark];
+    umark++;
+  }
   count = umark;
   for (i = 0; i < umark; ++i)
   {
@@ -656,9 +663,6 @@ static void sys_raid_add(int num, uint32_t* a) {
     now_raid_add++;
     count--;
     if (count == 0) {
-      // if (now_raid_add != 3)
-      // {
-      // }
       cprintf("Allocate for the last disk\n");
       Xor();
       break;
@@ -779,28 +783,7 @@ static void sys_raid_check() {
       }
       cprintf("\n");
     }
-    // }
-    // cprintf("data\n");
-    // for (i = 0; i < tmp_disk[2]->now; i++) {  
-    //   t |= (!!(tmp_disk[2]->data & (1 << i))) <<  l;
-    //   l++;
-    //   t |= (!!(tmp_disk[4]->data & (1 << i))) <<  l;
-    //   l++;
-    //   t |= (!!(tmp_disk[5]->data & (1 << i))) <<  l;
-    //   l++;
-    //   t |= (!!(tmp_disk[6]->data & (1 << i))) <<  l;
-    //   l++;
-    //   if (l == 32) {
-    //     cprintf("%d ", t);
-    //     l = 0;
-    //     t = 0;
-    //   }
-    // }
-    // if (l != 0) {
-    //   cprintf("%d", t);
-    // }
-    // cprintf("\n");
-//    check_raid_disk();
+
     sum_d = 0;
     for (i = 0; i < 4; i++) {
       if (tmp_disk[i]->next == NULL) {
