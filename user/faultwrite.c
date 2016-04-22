@@ -31,8 +31,8 @@ umain(int argc, char **argv)
 
 	sys_raid_change(1, 22, 36);
 	sys_raid_change(1, 25, 94);
-	sys_raid_change(1, 29, 39);
-	sys_raid_change(1, 34, 64);
+	//sys_raid_change(1, 29, 39);
+	//sys_raid_change(1, 34, 64);
 
 	sys_raid_check();
 	return;

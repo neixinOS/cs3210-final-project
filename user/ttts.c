@@ -262,7 +262,7 @@ play_game(int sock) {
 
   int a[50];
   char *win = "Server: Win!\n";
-  char *lose = "Server: Lose\n";
+  char *lose = "Server:Lose!\n";
   char *tie = "Server: TIE!\n";
 
   int j = 0;
