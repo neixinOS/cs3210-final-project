@@ -78,20 +78,6 @@ send_data(struct http_request *req, int fd)
 {
   // LAB 6: Your code here.
   // panic("send_data not implemented");
-  char buf[1518];
-  int r;
-
-  do{
-    if((r = read(fd, buf, 1518)) <= 0) {
-      return r;
-    }
-    if(write(req->sock, buf, r) != r) {
-      return -1;
-    }
-  } while (r == 1518);
-
-
-  return 0;
   
 }
 
