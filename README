@@ -6,5 +6,14 @@ Team 19: Online Tic-Tac-Toe + RAID
 How to test our code:
 
   For Lab6 part: run the grade script.
-  For the game part: open two terminals, one type "make run-ttts" and this is our game server, the other type "make nc-7" as our client. Follow the instructions on the termial to play.
-  For RAID part: open a terminal, type "make run-faultwrite", to see the detailed print out from each system calls related to RAID. Including disk initialization, add to disk, corrupt the content, and data recovery. The contents of each sector will also print out.
+
+  For the game part: open two terminals, one type "make run-ttts" and this is our game server, 
+  the other type "make nc-7" as our client. Follow the instructions on the termial to play.
+  Notice that server side will always be open, and client will be closed after a round.
+  If one round ends, you can simply connect to the server again and start a new round by 
+  typing “make nc-7”.
+  
+  For RAID part: open a terminal, type "make run-faultwrite"
+  To see the detailed print out from each system calls related to RAID. 
+  Including disk initialization, add to disk, corrupt the content, and data recovery. 
+  The contents of each sector will also print out, along with very detailed checking message.
