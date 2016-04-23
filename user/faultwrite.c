@@ -19,6 +19,11 @@ umain(int argc, char **argv)
 	// corrupt the data here
 	sys_raid_change(1, 5, 91);
 	sys_raid_change(1, 12, 42);
+
+	// Since block 12 and 13 from same logical sector
+	// if uncommet following line, sys_raid_check will print "sector 3 can't be repaired"
+	//sys_raid_change(1, 13, 42);
+	
 	sys_raid_change(1, 22, 36);
 	sys_raid_change(1, 25, 94);
 	sys_raid_change(1, 29, 39);
